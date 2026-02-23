@@ -1,0 +1,47 @@
+{
+  "categories": ["cs.AI", "cs.LG", "cs.CL"],
+  "include_keywords": [
+    "agent",
+    "reasoning",
+    "retrieval",
+    "llm",
+    "multimodal",
+    "long context",
+    "benchmark"
+  ],
+  "exclude_keywords": [
+    "medical imaging",
+    "satellite"
+  ],
+  "education_focus_keywords": [
+    "education",
+    "classroom",
+    "teacher",
+    "student",
+    "learning",
+    "pedagogy",
+    "instruction",
+    "tutoring",
+    "learning analytics",
+    "ai literacy",
+    "tpack",
+    "scaffolding"
+  ],
+  "min_education_hits": 2,
+  "min_include_hits": 1,
+  "fallback_min_education_hits": 1,
+  "seen_state_path": "data/seen_papers.json",
+  "source_limits": {
+    "arxiv": 80,
+    "eric": 80,
+    "openalex": 80
+  },
+  "source_weights": {
+    "arxiv": 0,
+    "eric": 2,
+    "openalex": 1
+  },
+  "max_results": 80,
+  "top_k": 10,
+  "review_top_k": 5
+}

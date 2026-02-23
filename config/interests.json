@@ -1,0 +1,49 @@
+{
+  "categories": ["cs.AI", "cs.CL", "cs.HC", "cs.LG"],
+  "include_keywords": [
+    "human-ai collaboration",
+    "classroom ai",
+    "ai tutoring",
+    "instructional design",
+    "scaffolding",
+    "tpack",
+    "ai literacy",
+    "teacher ai",
+    "education",
+    "learning analytics",
+    "llm classroom",
+    "ai pedagogy"
+  ],
+  "exclude_keywords": [],
+  "education_focus_keywords": [
+    "education",
+    "classroom",
+    "teacher",
+    "student",
+    "learning",
+    "pedagogy",
+    "instruction",
+    "tutoring",
+    "learning analytics",
+    "ai literacy",
+    "tpack",
+    "scaffolding"
+  ],
+  "min_education_hits": 3,
+  "min_include_hits": 1,
+  "fallback_min_education_hits": 2,
+  "seen_state_path": "data/seen_papers.json",
+  "source_limits": {
+    "arxiv": 120,
+    "eric": 120,
+    "openalex": 120
+  },
+  "source_weights": {
+    "arxiv": 0,
+    "eric": 2,
+    "openalex": 1
+  },
+  "max_results": 120,
+  "top_k": 10,
+  "review_top_k": 5
+}

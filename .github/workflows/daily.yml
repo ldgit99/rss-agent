@@ -1,0 +1,45 @@
+name: Daily Paper Agent
+
+on:
+  schedule:
+    # 07:00 KST = 22:00 UTC (previous day)
+    - cron: "0 22 * * *"
+  workflow_dispatch:
+
+jobs:
+  run-agent:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install dependencies
+        run: python -m pip install -r requirements.txt
+
+      - name: Run agent
+        env:
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+          OPENAI_MODEL: gpt-4o-mini
+          SMTP_HOST: ${{ secrets.SMTP_HOST }}
+          SMTP_PORT: ${{ secrets.SMTP_PORT }}
+          SMTP_USER: ${{ secrets.SMTP_USER }}
+          SMTP_PASS: ${{ secrets.SMTP_PASS }}
+          EMAIL_FROM: ${{ secrets.EMAIL_FROM }}
+          EMAIL_TO: ${{ secrets.EMAIL_TO }}
+          OPENALEX_EMAIL: ${{ secrets.OPENALEX_EMAIL }}
+          OBSIDIAN_VAULT_PATH: output
+          OBSIDIAN_SUBFOLDER: 00-Inbox
+        run: python src/arxiv_agent.py
+
+      - name: Upload generated notes
+        uses: actions/upload-artifact@v4
+        with:
+          name: paper-notes
+          path: output/
+          if-no-files-found: ignore
