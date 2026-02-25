@@ -611,7 +611,9 @@ def render_obsidian_note(paper: Paper) -> str:
 def save_obsidian_notes(papers: List[Paper], output_root: Path, subfolder: str) -> List[Path]:
     day = datetime.now().strftime("%Y-%m-%d")
     target_dir = output_root / subfolder
-    target_dir.mkdir(parents=True, exist_ok=True)
+    # Handle junction/symlink paths on Windows: exists() can be False when target is missing.
+    if not os.path.lexists(str(target_dir)):
+        target_dir.mkdir(parents=True, exist_ok=True)
 
     saved_paths: List[Path] = []
     for paper in papers:

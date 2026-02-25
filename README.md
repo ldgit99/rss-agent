@@ -83,5 +83,5 @@ Schedule note:
 - `0 22 * * *` means 07:00 KST daily.
 
 Obsidian sync note:
-- GitHub Actions writes notes to `obsidian/00-Inbox`.
+- GitHub Actions writes notes to `obsidian/00-inbox`.
 - Enable Obsidian Git plugin on your local vault clone and pull periodically (or on startup) to sync new notes.

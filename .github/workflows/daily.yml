@@ -37,7 +37,7 @@ jobs:
           EMAIL_TO: ${{ secrets.EMAIL_TO }}
           OPENALEX_EMAIL: ${{ secrets.OPENALEX_EMAIL }}
           OBSIDIAN_VAULT_PATH: obsidian
-          OBSIDIAN_SUBFOLDER: 00-Inbox
+          OBSIDIAN_SUBFOLDER: 00-inbox
         run: python src/arxiv_agent.py
 
       - name: Upload generated notes
