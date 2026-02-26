@@ -6,7 +6,7 @@ For reviewed papers, it attempts PDF full-text extraction first and falls back t
 Outputs:
 - Save markdown into your Obsidian vault
 - Send the same markdown by email
-- Run automatically every day at 07:00 (Windows Task Scheduler)
+- Run automatically every day at 08:00 (Windows Task Scheduler)
 
 ## 1) Install
 
@@ -51,10 +51,10 @@ Edit `config/interests.json`:
 .venv\Scripts\python.exe src\arxiv_agent.py --dry-run
 ```
 
-## 4) Register 07:00 Daily Task
+## 4) Register 08:00 Daily Task
 
 ```powershell
-powershell -ExecutionPolicy Bypass -File scripts\register_task.ps1 -TaskName "ArxivDailyAgent" -Time "07:00"
+powershell -ExecutionPolicy Bypass -File scripts\register_task.ps1 -TaskName "ArxivDailyAgent" -Time "08:00"
 ```
 
 Check task:
@@ -80,7 +80,7 @@ Workflow file:
 
 Schedule note:
 - The workflow uses UTC cron.
-- `0 22 * * *` means 07:00 KST daily.
+- `0 23 * * *` means 08:00 KST daily.
 
 Obsidian sync note:
 - GitHub Actions writes notes to `obsidian/00-inbox`.

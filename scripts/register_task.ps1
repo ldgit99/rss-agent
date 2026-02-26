@@ -1,6 +1,6 @@
 param(
   [string]$TaskName = "ArxivDailyAgent",
-  [string]$Time = "07:00"
+  [string]$Time = "08:00"
 )
 
 $ErrorActionPreference = "Stop"
