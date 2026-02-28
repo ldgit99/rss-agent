@@ -1,4 +1,5 @@
 import argparse
+import html
 import io
 import json
 import os
@@ -577,6 +578,192 @@ def render_email_markdown(papers: List[Paper]) -> str:
     return "\n".join(lines)
 
 
+def normalize_day(published: str) -> str:
+    if not published:
+        return "명시되지 않음"
+    val = published.strip()
+    if len(val) >= 10 and val[4] == "-" and val[7] == "-":
+        return val[:10]
+    if len(val) >= 4 and val[:4].isdigit():
+        return f"{val[:4]}-01-01"
+    return "명시되지 않음"
+
+
+def render_dashboard_html(papers: List[Paper]) -> str:
+    groups = {}
+    for paper in papers:
+        day = normalize_day(paper.published)
+        groups.setdefault(day, []).append(paper)
+
+    sections: List[str] = []
+    for day in sorted(groups.keys(), reverse=True):
+        cards: List[str] = []
+        for paper in groups[day]:
+            title = html.escape(paper.title)
+            review = html.escape((paper.review or paper.summary or "명시되지 않음").strip())
+            source = html.escape(paper.source.upper())
+            link = html.escape(paper.link)
+            cards.append(
+                f"""
+                <article class="tile">
+                  <div class="tile-head">
+                    <span class="badge">{source}</span>
+                    <span class="score">Score {paper.score}</span>
+                  </div>
+                  <h3 class="title">{title}</h3>
+                  <p class="content">{review}</p>
+                  <a class="link" href="{link}" target="_blank" rel="noreferrer">논문 보기</a>
+                </article>
+                """
+            )
+        sections.append(
+            f"""
+            <section class="row-block">
+              <h2>{html.escape(day)}</h2>
+              <div class="row-grid">
+                {''.join(cards)}
+              </div>
+            </section>
+            """
+        )
+
+    body = "\n".join(sections) if sections else "<p class='empty'>표시할 논문이 없습니다.</p>"
+    return f"""<!doctype html>
+<html lang="ko">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Paper Dashboard</title>
+  <style>
+    :root {{
+      --bg: #f2f4f6;
+      --card: #ffffff;
+      --ink: #191f28;
+      --muted: #6b7684;
+      --line: #e5e8eb;
+      --brand: #3182f6;
+    }}
+    * {{ box-sizing: border-box; }}
+    body {{
+      margin: 0;
+      background: var(--bg);
+      color: var(--ink);
+      font-family: "Pretendard", "Noto Sans KR", "Segoe UI", sans-serif;
+    }}
+    .wrap {{
+      max-width: 1280px;
+      margin: 0 auto;
+      padding: 24px 16px 48px;
+    }}
+    h1 {{
+      margin: 0 0 16px;
+      font-size: 28px;
+      font-weight: 700;
+    }}
+    .row-block {{
+      margin-bottom: 24px;
+    }}
+    .row-block h2 {{
+      margin: 0 0 10px;
+      color: var(--muted);
+      font-size: 15px;
+      font-weight: 700;
+    }}
+    .row-grid {{
+      display: grid;
+      grid-template-columns: repeat(5, minmax(0, 1fr));
+      gap: 12px;
+    }}
+    .tile {{
+      background: var(--card);
+      border: 1px solid var(--line);
+      border-radius: 18px;
+      padding: 14px;
+      min-height: 280px;
+      display: flex;
+      flex-direction: column;
+      box-shadow: 0 6px 14px rgba(25, 31, 40, 0.04);
+    }}
+    .tile-head {{
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 10px;
+      font-size: 12px;
+    }}
+    .badge {{
+      background: #e8f3ff;
+      color: var(--brand);
+      border-radius: 999px;
+      padding: 3px 8px;
+      font-weight: 700;
+    }}
+    .score {{
+      color: var(--muted);
+      font-weight: 600;
+    }}
+    .title {{
+      margin: 0 0 8px;
+      font-size: 16px;
+      line-height: 1.35;
+      display: -webkit-box;
+      -webkit-line-clamp: 3;
+      -webkit-box-orient: vertical;
+      overflow: hidden;
+    }}
+    .content {{
+      margin: 0 0 12px;
+      color: #333d4b;
+      font-size: 13px;
+      line-height: 1.5;
+      display: -webkit-box;
+      -webkit-line-clamp: 10;
+      -webkit-box-orient: vertical;
+      overflow: hidden;
+      flex: 1;
+    }}
+    .link {{
+      text-decoration: none;
+      color: var(--brand);
+      font-size: 13px;
+      font-weight: 700;
+    }}
+    .empty {{
+      color: var(--muted);
+      padding: 20px;
+      background: #fff;
+      border: 1px dashed var(--line);
+      border-radius: 14px;
+    }}
+    @media (max-width: 1200px) {{
+      .row-grid {{ grid-template-columns: repeat(3, minmax(0, 1fr)); }}
+    }}
+    @media (max-width: 860px) {{
+      .row-grid {{ grid-template-columns: repeat(2, minmax(0, 1fr)); }}
+    }}
+    @media (max-width: 560px) {{
+      .row-grid {{ grid-template-columns: 1fr; }}
+    }}
+  </style>
+</head>
+<body>
+  <main class="wrap">
+    <h1>논문 요약 대시보드</h1>
+    {body}
+  </main>
+</body>
+</html>"""
+
+
+def save_dashboard_html(papers: List[Paper], output_root: Path, subfolder: str) -> Path:
+    dashboard_dir = output_root / subfolder
+    if not os.path.lexists(str(dashboard_dir)):
+        dashboard_dir.mkdir(parents=True, exist_ok=True)
+    dashboard_path = dashboard_dir / "dashboard.html"
+    dashboard_path.write_text(render_dashboard_html(papers), encoding="utf-8")
+    return dashboard_path
+
+
 def sanitize_filename(name: str, max_len: int = 120) -> str:
     sanitized = re.sub(r'[<>:"/\\|?*\x00-\x1f]', "_", name)
     sanitized = re.sub(r"\s+", " ", sanitized).strip().strip(".")
@@ -751,6 +938,9 @@ def run(config_path: Path, dry_run: bool = False) -> List[Path]:
     subfolder = os.getenv("OBSIDIAN_SUBFOLDER", "Arxiv-Daily")
     saved_paths = save_obsidian_notes(selected, output_root=output_root, subfolder=subfolder)
     print(f"[INFO] Saved {len(saved_paths)} Obsidian notes in: {output_root / subfolder}")
+    reviewed_for_dashboard = [p for p in selected if p.review][:5]
+    dashboard_path = save_dashboard_html(reviewed_for_dashboard, output_root=output_root, subfolder=subfolder)
+    print(f"[INFO] Saved dashboard: {dashboard_path}")
 
     if not dry_run:
         selected_ids = {p.paper_id for p in selected if p.paper_id}

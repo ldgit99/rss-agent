@@ -85,3 +85,18 @@ Schedule note:
 Obsidian sync note:
 - GitHub Actions writes notes to `obsidian/00-inbox`.
 - Enable Obsidian Git plugin on your local vault clone and pull periodically (or on startup) to sync new notes.
+
+## 6) Single Ops Script (fewer approval prompts)
+
+Use one command pattern:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File scripts\ops.ps1 -Action <action>
+```
+
+Actions:
+- `status`: show local scheduler status
+- `run-once`: run the agent immediately (mail + notes)
+- `schedule-8am`: enforce daily 08:00 local schedule
+- `git-pull`: pull latest from `origin/main`
+- `git-push`: push current branch to `origin/main`
