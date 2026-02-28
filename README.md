@@ -100,3 +100,11 @@ Actions:
 - `schedule-8am`: enforce daily 08:00 local schedule
 - `git-pull`: pull latest from `origin/main`
 - `git-push`: push current branch to `origin/main`
+
+## 7) Web Dashboard (GitHub Pages)
+
+- Dashboard source file: `obsidian/00-inbox/dashboard.html`
+- Pages deploy workflow: `.github/workflows/pages.yml`
+- Expected URL: `https://ldgit99.github.io/rss-agent/`
+
+If the URL shows "Dashboard is not generated yet", run the daily workflow once so that `dashboard.html` is committed.

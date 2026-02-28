@@ -1,0 +1,66 @@
+name: Deploy Dashboard (GitHub Pages)
+
+on:
+  push:
+    branches: ["main"]
+    paths:
+      - "obsidian/00-inbox/**"
+      - ".github/workflows/pages.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: "pages"
+  cancel-in-progress: true
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Prepare site
+        shell: bash
+        run: |
+          mkdir -p _site
+          if [ -f "obsidian/00-inbox/dashboard.html" ]; then
+            cp obsidian/00-inbox/dashboard.html _site/index.html
+          else
+            cat > _site/index.html <<'HTML'
+            <!doctype html>
+            <html lang="ko">
+            <head>
+              <meta charset="utf-8" />
+              <meta name="viewport" content="width=device-width, initial-scale=1" />
+              <title>Dashboard Not Ready</title>
+              <style>
+                body { font-family: sans-serif; max-width: 680px; margin: 40px auto; line-height: 1.6; }
+              </style>
+            </head>
+            <body>
+              <h1>Dashboard is not generated yet.</h1>
+              <p>Run the daily workflow once, then this page will show the latest dashboard.</p>
+            </body>
+            </html>
+            HTML
+          fi
+
+      - name: Setup Pages
+        uses: actions/configure-pages@v5
+
+      - name: Upload Pages artifact
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: _site
+
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4
