@@ -5,6 +5,7 @@ on:
     branches: ["main"]
     paths:
       - "obsidian/00-inbox/**"
+      - "obsidian/00-Inbox/**"
       - ".github/workflows/pages.yml"
   workflow_dispatch:
 
@@ -28,30 +29,38 @@ jobs:
         uses: actions/checkout@v4
 
       - name: Prepare site
-        shell: bash
+        shell: pwsh
         run: |
-          mkdir -p _site
-          if [ -f "obsidian/00-inbox/dashboard.html" ]; then
-            cp obsidian/00-inbox/dashboard.html _site/index.html
-          else
-            cat > _site/index.html <<'HTML'
-            <!doctype html>
-            <html lang="ko">
-            <head>
-              <meta charset="utf-8" />
-              <meta name="viewport" content="width=device-width, initial-scale=1" />
-              <title>Dashboard Not Ready</title>
-              <style>
-                body { font-family: sans-serif; max-width: 680px; margin: 40px auto; line-height: 1.6; }
-              </style>
-            </head>
-            <body>
-              <h1>Dashboard is not generated yet.</h1>
-              <p>Run the daily workflow once, then this page will show the latest dashboard.</p>
-            </body>
-            </html>
-            HTML
-          fi
+          New-Item -ItemType Directory -Force "_site" | Out-Null
+          $candidates = @(
+            "obsidian/00-inbox/dashboard.html",
+            "obsidian/00-Inbox/dashboard.html"
+          )
+          $source = $null
+          foreach ($c in $candidates) {
+            if (Test-Path $c) { $source = $c; break }
+          }
+          if ($source) {
+            Copy-Item -Force $source "_site/index.html"
+          } else {
+            @'
+          <!doctype html>
+          <html lang="ko">
+          <head>
+            <meta charset="utf-8" />
+            <meta name="viewport" content="width=device-width, initial-scale=1" />
+            <title>Dashboard Not Ready</title>
+            <style>
+              body { font-family: sans-serif; max-width: 680px; margin: 40px auto; line-height: 1.6; }
+            </style>
+          </head>
+          <body>
+            <h1>Dashboard is not generated yet.</h1>
+            <p>Run the daily workflow once, then this page will show the latest dashboard.</p>
+          </body>
+          </html>
+          '@ | Set-Content -Path "_site/index.html" -Encoding UTF8
+          }
 
       - name: Setup Pages
         uses: actions/configure-pages@v5
