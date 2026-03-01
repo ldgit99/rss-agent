@@ -590,167 +590,391 @@ def normalize_day(published: str) -> str:
 
 
 def render_dashboard_html(papers: List[Paper]) -> str:
-    groups = {}
+    now = datetime.now().strftime("%Y-%m-%d %H:%M")
+
+    all_cards_data = []
     for paper in papers:
         day = normalize_day(paper.published)
-        groups.setdefault(day, []).append(paper)
+        content = (paper.review or paper.summary or "명시되지 않음").strip()
+        all_cards_data.append({
+            "source": paper.source.upper(),
+            "score": paper.score,
+            "day": day,
+            "title": paper.title,
+            "content": content,
+            "link": paper.link,
+            "hasReview": bool(paper.review),
+        })
 
-    sections: List[str] = []
-    for day in sorted(groups.keys(), reverse=True):
-        cards: List[str] = []
-        for paper in groups[day]:
-            title = html.escape(paper.title)
-            review = html.escape((paper.review or paper.summary or "명시되지 않음").strip())
-            source = html.escape(paper.source.upper())
-            link = html.escape(paper.link)
-            cards.append(
-                f"""
-                <article class="tile">
-                  <div class="tile-head">
-                    <span class="badge">{source}</span>
-                    <span class="score">Score {paper.score}</span>
-                  </div>
-                  <h3 class="title">{title}</h3>
-                  <p class="content">{review}</p>
-                  <a class="link" href="{link}" target="_blank" rel="noreferrer">논문 보기</a>
-                </article>
-                """
-            )
-        sections.append(
-            f"""
-            <section class="row-block">
-              <h2>{html.escape(day)}</h2>
-              <div class="row-grid">
-                {''.join(cards)}
-              </div>
-            </section>
-            """
-        )
+    cards_json = json.dumps(all_cards_data, ensure_ascii=False).replace("</", "<\\/")
 
-    body = "\n".join(sections) if sections else "<p class='empty'>표시할 논문이 없습니다.</p>"
+    css = """
+:root {
+  --bg: #f2f4f6; --card: #ffffff; --ink: #191f28;
+  --muted: #6b7684; --line: #e5e8eb; --brand: #3182f6;
+  --brand-bg: #e8f3ff;
+}
+[data-theme="dark"] {
+  --bg: #1a1e27; --card: #252a35; --ink: #e5e8eb;
+  --muted: #8b95a1; --line: #333d4b; --brand: #4d9cf8;
+  --brand-bg: #1a2e4a;
+}
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body {
+  background: var(--bg); color: var(--ink);
+  font-family: "Pretendard", "Noto Sans KR", "Segoe UI", sans-serif;
+  transition: background 0.2s, color 0.2s;
+}
+.wrap { max-width: 1280px; margin: 0 auto; padding: 24px 16px 48px; }
+.site-header {
+  display: flex; align-items: center; justify-content: space-between;
+  margin-bottom: 20px; flex-wrap: wrap; gap: 12px;
+}
+h1 { font-size: 28px; font-weight: 700; }
+.header-right { display: flex; align-items: center; gap: 12px; }
+.updated { font-size: 13px; color: var(--muted); }
+.btn-theme {
+  background: var(--card); border: 1px solid var(--line);
+  border-radius: 8px; padding: 6px 14px; cursor: pointer;
+  font-size: 13px; font-weight: 600; color: var(--ink);
+  transition: border-color 0.15s, color 0.15s;
+}
+.btn-theme:hover { border-color: var(--brand); color: var(--brand); }
+.toolbar {
+  background: var(--card); border: 1px solid var(--line);
+  border-radius: 14px; padding: 14px 16px; margin-bottom: 16px;
+  display: flex; flex-wrap: wrap; gap: 10px; align-items: center;
+}
+.search-input {
+  flex: 1; min-width: 180px; border: 1px solid var(--line);
+  border-radius: 8px; padding: 8px 12px; font-size: 14px;
+  background: var(--bg); color: var(--ink); outline: none;
+}
+.search-input:focus { border-color: var(--brand); }
+.filter-group { display: flex; gap: 6px; flex-wrap: wrap; }
+.btn-filter {
+  border: 1px solid var(--line); border-radius: 999px;
+  padding: 5px 12px; font-size: 12px; font-weight: 700;
+  cursor: pointer; background: var(--card); color: var(--muted);
+  transition: background 0.15s, color 0.15s, border-color 0.15s;
+}
+.btn-filter.active { background: var(--brand); border-color: var(--brand); color: #fff; }
+.score-label { font-size: 13px; color: var(--muted); font-weight: 600; }
+.score-select {
+  border: 1px solid var(--line); border-radius: 8px;
+  padding: 6px 10px; font-size: 13px;
+  background: var(--bg); color: var(--ink);
+}
+.result-info { font-size: 13px; color: var(--muted); margin-bottom: 16px; }
+.row-block { margin-bottom: 28px; }
+.row-block-head { display: flex; align-items: center; margin-bottom: 10px; }
+.day-label { font-size: 15px; font-weight: 700; color: var(--muted); }
+.row-grid { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 12px; }
+.tile {
+  background: var(--card); border: 1px solid var(--line);
+  border-radius: 18px; padding: 14px; min-height: 280px;
+  display: flex; flex-direction: column;
+  box-shadow: 0 6px 14px rgba(25, 31, 40, 0.04);
+}
+[data-theme="dark"] .tile { box-shadow: none; }
+.tile-head {
+  display: flex; justify-content: space-between;
+  align-items: center; margin-bottom: 10px;
+}
+.badge-wrap { display: flex; gap: 4px; align-items: center; }
+.badge {
+  background: var(--brand-bg); color: var(--brand);
+  border-radius: 999px; padding: 3px 8px;
+  font-size: 12px; font-weight: 700;
+}
+.review-tag {
+  background: #e6f9f0; color: #05c46b;
+  border-radius: 999px; padding: 3px 7px;
+  font-size: 11px; font-weight: 700;
+}
+[data-theme="dark"] .review-tag { background: #0d3325; color: #0be881; }
+.score { color: var(--muted); font-size: 12px; font-weight: 600; }
+.card-title {
+  font-size: 15px; line-height: 1.35; margin-bottom: 8px;
+  display: -webkit-box; -webkit-line-clamp: 3;
+  -webkit-box-orient: vertical; overflow: hidden;
+}
+.content {
+  font-size: 12px; line-height: 1.55; flex: 1;
+  overflow: hidden; max-height: 168px; margin-bottom: 12px;
+}
+.content p { color: #4e5968; margin-bottom: 5px; }
+[data-theme="dark"] .content p { color: var(--muted); }
+.content h1, .content h2, .content h3,
+.content h4, .content h5, .content h6 {
+  font-size: 12px; font-weight: 700; margin: 5px 0 3px;
+}
+.content ul, .content ol { padding-left: 14px; margin-bottom: 5px; }
+.content li { margin-bottom: 2px; color: #4e5968; }
+[data-theme="dark"] .content li { color: var(--muted); }
+.content blockquote {
+  border-left: 3px solid var(--brand); padding-left: 8px;
+  color: var(--muted); margin: 4px 0;
+}
+.content code {
+  background: var(--bg); border-radius: 4px;
+  padding: 1px 4px; font-size: 11px; font-family: monospace;
+}
+.content strong { color: var(--ink); }
+.card-link {
+  text-decoration: none; color: var(--brand);
+  font-size: 13px; font-weight: 700;
+}
+.card-link:hover { text-decoration: underline; }
+.empty-state {
+  text-align: center; padding: 48px 20px; color: var(--muted);
+  background: var(--card); border: 1px dashed var(--line); border-radius: 14px;
+}
+.pagination {
+  display: flex; justify-content: center; align-items: center;
+  gap: 8px; margin-top: 32px; flex-wrap: wrap;
+}
+.btn-page {
+  border: 1px solid var(--line); border-radius: 8px;
+  padding: 7px 14px; font-size: 13px; font-weight: 600;
+  cursor: pointer; background: var(--card); color: var(--ink);
+}
+.btn-page:disabled { opacity: 0.3; cursor: not-allowed; }
+.btn-page.active { background: var(--brand); border-color: var(--brand); color: #fff; }
+@media (max-width: 1200px) { .row-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); } }
+@media (max-width: 860px)  { .row-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+@media (max-width: 560px)  { .row-grid { grid-template-columns: 1fr; } h1 { font-size: 22px; } }
+"""
+
+    js = """
+const PAPERS = __CARDS_JSON__;
+const PAGE_SIZE = 10;
+let currentSource = 'ALL';
+let currentPage = 1;
+let filtered = [];
+
+function toggleTheme() {
+  const html = document.documentElement;
+  const next = html.dataset.theme === 'dark' ? 'light' : 'dark';
+  html.dataset.theme = next;
+  document.getElementById('themeBtn').textContent = next === 'dark' ? '라이트 모드' : '다크 모드';
+  localStorage.setItem('theme', next);
+}
+
+function setSource(btn) {
+  currentSource = btn.dataset.source;
+  document.querySelectorAll('#sourceFilters .btn-filter').forEach(function(b) {
+    b.classList.remove('active');
+  });
+  btn.classList.add('active');
+  currentPage = 1;
+  applyFilters();
+}
+
+function applyFilters() {
+  const query = (document.getElementById('searchInput').value || '').toLowerCase();
+  const minScore = parseInt(document.getElementById('scoreFilter').value) || 0;
+  filtered = PAPERS.filter(function(p) {
+    if (currentSource !== 'ALL' && p.source !== currentSource) return false;
+    if (p.score < minScore) return false;
+    if (query && p.title.toLowerCase().indexOf(query) === -1) return false;
+    return true;
+  });
+  currentPage = 1;
+  render();
+}
+
+function mdToHtml(text) {
+  try {
+    const parsed = marked.parse(text);
+    return (typeof DOMPurify !== 'undefined') ? DOMPurify.sanitize(parsed) : parsed;
+  } catch(e) {
+    return String(text).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+  }
+}
+
+function renderCard(p) {
+  const article = document.createElement('article');
+  article.className = 'tile';
+
+  const head = document.createElement('div');
+  head.className = 'tile-head';
+
+  const badgeWrap = document.createElement('span');
+  badgeWrap.className = 'badge-wrap';
+  const badge = document.createElement('span');
+  badge.className = 'badge';
+  badge.textContent = p.source;
+  badgeWrap.appendChild(badge);
+  if (p.hasReview) {
+    const rt = document.createElement('span');
+    rt.className = 'review-tag';
+    rt.textContent = '리뷰';
+    badgeWrap.appendChild(rt);
+  }
+
+  const scoreEl = document.createElement('span');
+  scoreEl.className = 'score';
+  scoreEl.textContent = 'Score ' + p.score;
+
+  head.appendChild(badgeWrap);
+  head.appendChild(scoreEl);
+
+  const titleEl = document.createElement('h3');
+  titleEl.className = 'card-title';
+  titleEl.textContent = p.title;
+
+  const contentEl = document.createElement('div');
+  contentEl.className = 'content';
+  contentEl.innerHTML = mdToHtml(p.content);
+
+  const linkEl = document.createElement('a');
+  linkEl.className = 'card-link';
+  linkEl.href = p.link;
+  linkEl.target = '_blank';
+  linkEl.rel = 'noreferrer';
+  linkEl.textContent = '논문 보기';
+
+  article.appendChild(head);
+  article.appendChild(titleEl);
+  article.appendChild(contentEl);
+  article.appendChild(linkEl);
+  return article;
+}
+
+function render() {
+  const start = (currentPage - 1) * PAGE_SIZE;
+  const page = filtered.slice(start, start + PAGE_SIZE);
+  const totalPages = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
+  const dashboard = document.getElementById('dashboard');
+
+  document.getElementById('resultInfo').textContent =
+    '총 ' + filtered.length + '편 · ' + currentPage + ' / ' + totalPages + ' 페이지';
+
+  dashboard.innerHTML = '';
+  if (filtered.length === 0) {
+    const empty = document.createElement('div');
+    empty.className = 'empty-state';
+    empty.textContent = '검색 조건에 맞는 논문이 없습니다.';
+    dashboard.appendChild(empty);
+    document.getElementById('pagination').innerHTML = '';
+    return;
+  }
+
+  const groups = {};
+  page.forEach(function(p) {
+    if (!groups[p.day]) groups[p.day] = [];
+    groups[p.day].push(p);
+  });
+
+  Object.keys(groups).sort().reverse().forEach(function(day) {
+    const section = document.createElement('section');
+    section.className = 'row-block';
+
+    const rowHead = document.createElement('div');
+    rowHead.className = 'row-block-head';
+    const h2 = document.createElement('h2');
+    h2.className = 'day-label';
+    h2.textContent = day;
+    rowHead.appendChild(h2);
+
+    const grid = document.createElement('div');
+    grid.className = 'row-grid';
+    groups[day].forEach(function(p) { grid.appendChild(renderCard(p)); });
+
+    section.appendChild(rowHead);
+    section.appendChild(grid);
+    dashboard.appendChild(section);
+  });
+
+  const pg = document.getElementById('pagination');
+  pg.innerHTML = '';
+  if (totalPages > 1) {
+    const prev = document.createElement('button');
+    prev.className = 'btn-page';
+    prev.textContent = '이전';
+    prev.disabled = currentPage === 1;
+    prev.addEventListener('click', function() { goPage(currentPage - 1); });
+    pg.appendChild(prev);
+
+    for (let i = 1; i <= totalPages; i++) {
+      (function(n) {
+        const btn = document.createElement('button');
+        btn.className = 'btn-page' + (n === currentPage ? ' active' : '');
+        btn.textContent = n;
+        btn.addEventListener('click', function() { goPage(n); });
+        pg.appendChild(btn);
+      })(i);
+    }
+
+    const next = document.createElement('button');
+    next.className = 'btn-page';
+    next.textContent = '다음';
+    next.disabled = currentPage === totalPages;
+    next.addEventListener('click', function() { goPage(currentPage + 1); });
+    pg.appendChild(next);
+  }
+}
+
+function goPage(p) {
+  currentPage = p;
+  render();
+  window.scrollTo({ top: 0, behavior: 'smooth' });
+}
+
+(function() {
+  const saved = localStorage.getItem('theme');
+  if (saved) {
+    document.documentElement.dataset.theme = saved;
+    document.getElementById('themeBtn').textContent = saved === 'dark' ? '라이트 모드' : '다크 모드';
+  }
+  filtered = PAPERS.slice();
+  render();
+})();
+""".replace("__CARDS_JSON__", cards_json)
+
     return f"""<!doctype html>
-<html lang="ko">
+<html lang="ko" data-theme="light">
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>Paper Dashboard</title>
-  <style>
-    :root {{
-      --bg: #f2f4f6;
-      --card: #ffffff;
-      --ink: #191f28;
-      --muted: #6b7684;
-      --line: #e5e8eb;
-      --brand: #3182f6;
-    }}
-    * {{ box-sizing: border-box; }}
-    body {{
-      margin: 0;
-      background: var(--bg);
-      color: var(--ink);
-      font-family: "Pretendard", "Noto Sans KR", "Segoe UI", sans-serif;
-    }}
-    .wrap {{
-      max-width: 1280px;
-      margin: 0 auto;
-      padding: 24px 16px 48px;
-    }}
-    h1 {{
-      margin: 0 0 16px;
-      font-size: 28px;
-      font-weight: 700;
-    }}
-    .row-block {{
-      margin-bottom: 24px;
-    }}
-    .row-block h2 {{
-      margin: 0 0 10px;
-      color: var(--muted);
-      font-size: 15px;
-      font-weight: 700;
-    }}
-    .row-grid {{
-      display: grid;
-      grid-template-columns: repeat(5, minmax(0, 1fr));
-      gap: 12px;
-    }}
-    .tile {{
-      background: var(--card);
-      border: 1px solid var(--line);
-      border-radius: 18px;
-      padding: 14px;
-      min-height: 280px;
-      display: flex;
-      flex-direction: column;
-      box-shadow: 0 6px 14px rgba(25, 31, 40, 0.04);
-    }}
-    .tile-head {{
-      display: flex;
-      justify-content: space-between;
-      align-items: center;
-      margin-bottom: 10px;
-      font-size: 12px;
-    }}
-    .badge {{
-      background: #e8f3ff;
-      color: var(--brand);
-      border-radius: 999px;
-      padding: 3px 8px;
-      font-weight: 700;
-    }}
-    .score {{
-      color: var(--muted);
-      font-weight: 600;
-    }}
-    .title {{
-      margin: 0 0 8px;
-      font-size: 16px;
-      line-height: 1.35;
-      display: -webkit-box;
-      -webkit-line-clamp: 3;
-      -webkit-box-orient: vertical;
-      overflow: hidden;
-    }}
-    .content {{
-      margin: 0 0 12px;
-      color: #333d4b;
-      font-size: 13px;
-      line-height: 1.5;
-      display: -webkit-box;
-      -webkit-line-clamp: 10;
-      -webkit-box-orient: vertical;
-      overflow: hidden;
-      flex: 1;
-    }}
-    .link {{
-      text-decoration: none;
-      color: var(--brand);
-      font-size: 13px;
-      font-weight: 700;
-    }}
-    .empty {{
-      color: var(--muted);
-      padding: 20px;
-      background: #fff;
-      border: 1px dashed var(--line);
-      border-radius: 14px;
-    }}
-    @media (max-width: 1200px) {{
-      .row-grid {{ grid-template-columns: repeat(3, minmax(0, 1fr)); }}
-    }}
-    @media (max-width: 860px) {{
-      .row-grid {{ grid-template-columns: repeat(2, minmax(0, 1fr)); }}
-    }}
-    @media (max-width: 560px) {{
-      .row-grid {{ grid-template-columns: 1fr; }}
-    }}
-  </style>
+  <title>논문 요약 대시보드</title>
+  <script src="https://cdn.jsdelivr.net/npm/marked@9/marked.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/dompurify@3/dist/purify.min.js"></script>
+  <style>{css}</style>
 </head>
 <body>
   <main class="wrap">
-    <h1>논문 요약 대시보드</h1>
-    {body}
+    <header class="site-header">
+      <h1>논문 요약 대시보드</h1>
+      <div class="header-right">
+        <span class="updated">업데이트: {now}</span>
+        <button class="btn-theme" id="themeBtn" onclick="toggleTheme()">다크 모드</button>
+      </div>
+    </header>
+    <div class="toolbar">
+      <input class="search-input" id="searchInput" type="search"
+             placeholder="제목 검색..." oninput="applyFilters()" />
+      <div class="filter-group" id="sourceFilters">
+        <button class="btn-filter active" data-source="ALL" onclick="setSource(this)">전체</button>
+        <button class="btn-filter" data-source="ARXIV" onclick="setSource(this)">arXiv</button>
+        <button class="btn-filter" data-source="ERIC" onclick="setSource(this)">ERIC</button>
+        <button class="btn-filter" data-source="OPENALEX" onclick="setSource(this)">OpenAlex</button>
+      </div>
+      <span class="score-label">최소 점수</span>
+      <select class="score-select" id="scoreFilter" onchange="applyFilters()">
+        <option value="0">전체</option>
+        <option value="5">5+</option>
+        <option value="10">10+</option>
+        <option value="15">15+</option>
+        <option value="20">20+</option>
+      </select>
+    </div>
+    <p class="result-info" id="resultInfo"></p>
+    <div id="dashboard"></div>
+    <nav class="pagination" id="pagination"></nav>
   </main>
+  <script>{js}</script>
 </body>
 </html>"""
 
@@ -938,8 +1162,7 @@ def run(config_path: Path, dry_run: bool = False) -> List[Path]:
     subfolder = os.getenv("OBSIDIAN_SUBFOLDER", "Arxiv-Daily")
     saved_paths = save_obsidian_notes(selected, output_root=output_root, subfolder=subfolder)
     print(f"[INFO] Saved {len(saved_paths)} Obsidian notes in: {output_root / subfolder}")
-    reviewed_for_dashboard = [p for p in selected if p.review][:5]
-    dashboard_path = save_dashboard_html(reviewed_for_dashboard, output_root=output_root, subfolder=subfolder)
+    dashboard_path = save_dashboard_html(selected, output_root=output_root, subfolder=subfolder)
     print(f"[INFO] Saved dashboard: {dashboard_path}")
 
     if not dry_run:
