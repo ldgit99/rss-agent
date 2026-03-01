@@ -43,23 +43,8 @@ jobs:
           if ($source) {
             Copy-Item -Force $source "_site/index.html"
           } else {
-            @'
-          <!doctype html>
-          <html lang="ko">
-          <head>
-            <meta charset="utf-8" />
-            <meta name="viewport" content="width=device-width, initial-scale=1" />
-            <title>Dashboard Not Ready</title>
-            <style>
-              body { font-family: sans-serif; max-width: 680px; margin: 40px auto; line-height: 1.6; }
-            </style>
-          </head>
-          <body>
-            <h1>Dashboard is not generated yet.</h1>
-            <p>Run the daily workflow once, then this page will show the latest dashboard.</p>
-          </body>
-          </html>
-          '@ | Set-Content -Path "_site/index.html" -Encoding UTF8
+            Write-Error "dashboard.html not found in obsidian/00-inbox or obsidian/00-Inbox"
+            exit 1
           }
 
       - name: Setup Pages
