@@ -537,44 +537,23 @@ def generate_openai_reviews(papers: List[Paper], include_keywords: List[str], re
 
 def render_email_markdown(papers: List[Paper]) -> str:
     now = datetime.now().strftime("%Y-%m-%d")
-    lines = [f"# arXiv Daily Picks ({now})", ""]
+    lines = [f"# 교육공학 연구 리뷰 ({now})", ""]
     if not papers:
-        lines.append("- No papers matched your keyword filters today.")
+        lines.append("- 오늘 리뷰된 논문이 없습니다.")
         return "\n".join(lines) + "\n"
 
-    lines.append("## Top 10 by Keyword Score")
-    lines.append("")
     for idx, paper in enumerate(papers, start=1):
-        short_summary = paper.summary[:350] + ("..." if len(paper.summary) > 350 else "")
-        authors = ", ".join(paper.authors[:6])
+        doi_link = f"https://doi.org/{paper.doi}" if paper.doi else paper.link
         lines.extend(
             [
                 f"## {idx}. {paper.title}",
-                f"- Score: {paper.score}",
                 f"- Published: {paper.published}",
-                f"- Authors: {authors}",
-                f"- Categories: {', '.join(paper.categories)}",
-                f"- Link: {paper.link}",
+                f"- Link: {doi_link}",
                 "",
-                short_summary,
+                paper.review or "",
                 "",
             ]
         )
-
-    reviewed = [p for p in papers if p.review]
-    if reviewed:
-        lines.append("## OpenAI Reviews (Top 5)")
-        lines.append("")
-        for idx, paper in enumerate(reviewed, start=1):
-            lines.extend(
-                [
-                    f"### Review {idx}: {paper.title}",
-                    f"- Link: {paper.link}",
-                    "",
-                    paper.review,
-                    "",
-                ]
-            )
     return "\n".join(lines)
 
 
@@ -1320,7 +1299,8 @@ def run(config_path: Path, dry_run: bool = False) -> List[Path]:
         include_keywords=include_keywords,
         review_top_k=review_top_k,
     )
-    email_markdown = render_email_markdown(selected)
+    reviewed_papers = [p for p in selected if p.review][:review_top_k]
+    email_markdown = render_email_markdown(reviewed_papers)
 
     obsidian_path = os.getenv("OBSIDIAN_VAULT_PATH")
     output_root = Path(obsidian_path) if obsidian_path else Path("output")
@@ -1336,7 +1316,7 @@ def run(config_path: Path, dry_run: bool = False) -> List[Path]:
 
     if not dry_run:
         send_email(
-            subject=f"[arXiv] Daily Picks {datetime.now().strftime('%Y-%m-%d')}",
+            subject=f"[RSS-AGENT] 교육공학 연구 리뷰-{datetime.now().strftime('%Y-%m-%d')}",
             body=email_markdown,
         )
     return saved_paths
