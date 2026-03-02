@@ -840,6 +840,7 @@ h1 { font-size: 26px; font-weight: 800; letter-spacing: -0.5px; }
 const PAPERS = __CARDS_JSON__;
 const PAGE_SIZE = 10;
 let currentSource = 'ALL';
+let currentSort = 'score';
 let currentPage = 1;
 let filtered = [];
 
@@ -859,6 +860,16 @@ function setSource(btn) {
   btn.classList.add('active');
   currentPage = 1;
   applyFilters();
+}
+
+function setSort(btn) {
+  currentSort = btn.dataset.sort;
+  document.querySelectorAll('#sortGroup .btn-filter').forEach(function(b) {
+    b.classList.remove('active');
+  });
+  btn.classList.add('active');
+  currentPage = 1;
+  render();
 }
 
 function applyFilters() {
@@ -996,8 +1007,15 @@ function render() {
     return;
   }
 
+  const sorted = page.slice().sort(function(a, b) {
+    if (currentSort === 'date') {
+      return b.day < a.day ? -1 : b.day > a.day ? 1 : b.score - a.score;
+    }
+    return b.score - a.score || (b.day < a.day ? -1 : b.day > a.day ? 1 : 0);
+  });
+
   const groups = {};
-  page.forEach(function(p) {
+  sorted.forEach(function(p) {
     if (!groups[p.day]) groups[p.day] = [];
     groups[p.day].push(p);
   });
@@ -1103,6 +1121,10 @@ function goPage(p) {
         <button class="btn-filter" data-source="ARXIV" onclick="setSource(this)">arXiv</button>
         <button class="btn-filter" data-source="ERIC" onclick="setSource(this)">ERIC</button>
         <button class="btn-filter" data-source="OPENALEX" onclick="setSource(this)">OpenAlex</button>
+      </div>
+      <div class="filter-group" id="sortGroup">
+        <button class="btn-filter active" data-sort="score" onclick="setSort(this)">점수순</button>
+        <button class="btn-filter" data-sort="date" onclick="setSort(this)">최신순</button>
       </div>
       <span class="score-label">최소 점수</span>
       <select class="score-select" id="scoreFilter" onchange="applyFilters()">
