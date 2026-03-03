@@ -572,11 +572,12 @@ def render_dashboard_html(papers: List[Paper]) -> str:
     now = datetime.now().strftime("%Y-%m-%d %H:%M")
 
     all_cards_data = []
-    for paper in papers:
+    for idx, paper in enumerate(papers):
         day = normalize_day(paper.published)
         content = (paper.review or paper.summary or "명시되지 않음").strip()
         doi_link = f"https://doi.org/{paper.doi}" if paper.doi else ""
         all_cards_data.append({
+            "id": str(idx),
             "source": paper.source.upper(),
             "score": paper.score,
             "day": day,
@@ -598,11 +599,14 @@ def render_dashboard_html(papers: List[Paper]) -> str:
   --muted: #6b7684;
   --sub: #4e5968;
   --line: #e5e8eb;
+  --line-light: #f3f5f7;
   --brand: #3182f6;
   --brand-bg: #e8f3ff;
   --brand-hover: #1b64da;
   --green: #05c46b;
   --green-bg: #e6f9f0;
+  --yellow: #f59e0b;
+  --yellow-bg: #fef3c7;
   --radius-card: 20px;
   --shadow: 0 2px 12px rgba(25,31,40,0.07);
 }
@@ -613,21 +617,25 @@ def render_dashboard_html(papers: List[Paper]) -> str:
   --muted: #8b95a1;
   --sub: #a0aab4;
   --line: #2c3444;
+  --line-light: #1a2638;
   --brand: #4d9cf8;
   --brand-bg: #172340;
   --brand-hover: #70b4ff;
   --green: #0be881;
   --green-bg: #0d3325;
+  --yellow: #fcd34d;
+  --yellow-bg: #664400;
   --shadow: none;
 }
 * { box-sizing: border-box; margin: 0; padding: 0; }
+html { scroll-behavior: smooth; }
 body {
   background: var(--bg); color: var(--ink);
   font-family: "Pretendard", "Noto Sans KR", "Segoe UI", sans-serif;
   transition: background 0.2s, color 0.2s;
   line-height: 1.5;
 }
-.wrap { max-width: 1300px; margin: 0 auto; padding: 28px 20px 64px; }
+.wrap { max-width: 1400px; margin: 0 auto; padding: 28px 20px 64px; }
 
 /* ── Header ── */
 .site-header {
@@ -635,31 +643,72 @@ body {
   margin-bottom: 24px; flex-wrap: wrap; gap: 12px;
 }
 .header-left { display: flex; flex-direction: column; gap: 2px; }
-h1 { font-size: 26px; font-weight: 800; letter-spacing: -0.5px; }
+h1 { font-size: 28px; font-weight: 800; letter-spacing: -0.5px; margin-bottom: 4px; }
 .subtitle { font-size: 13px; color: var(--muted); }
 .header-right { display: flex; align-items: center; gap: 10px; }
-.updated { font-size: 12px; color: var(--muted); }
-.btn-theme {
+.updated { font-size: 12px; color: var(--muted); white-space: nowrap; }
+.btn-icon { 
   background: var(--card); border: 1px solid var(--line);
-  border-radius: 8px; padding: 6px 14px; cursor: pointer;
-  font-size: 12px; font-weight: 700; color: var(--muted);
-  transition: all 0.15s;
+  border-radius: 8px; padding: 6px 10px; cursor: pointer;
+  font-size: 18px; transition: all 0.15s; display: flex; align-items: center; justify-content: center;
 }
-.btn-theme:hover { border-color: var(--brand); color: var(--brand); }
+.btn-icon:hover { border-color: var(--brand); color: var(--brand); }
+.btn-theme { white-space: nowrap; padding: 6px 14px; }
 
-/* ── Stats bar ── */
-.stats-bar {
-  display: flex; gap: 16px; margin-bottom: 16px; flex-wrap: wrap;
+/* ── Tabs ── */
+.tabs-section {
+  display: flex; gap: 8px; margin-bottom: 20px; border-bottom: 1px solid var(--line); overflow-x: auto;
+  padding-bottom: 12px;
+}
+.tab-btn {
+  border: none; background: transparent; padding: 6px 14px; 
+  font-size: 13px; font-weight: 700; color: var(--muted);
+  cursor: pointer; transition: all 0.15s; white-space: nowrap;
+  border-bottom: 2px solid transparent; margin-bottom: -12px;
+}
+.tab-btn:hover { color: var(--brand); }
+.tab-btn.active { color: var(--brand); border-bottom-color: var(--brand); }
+
+/* ── Stats section ── */
+.stats-container {
+  display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+  gap: 12px; margin-bottom: 20px;
 }
 .stat-chip {
   background: var(--card); border: 1px solid var(--line);
-  border-radius: 10px; padding: 7px 14px;
+  border-radius: 12px; padding: 12px 14px;
   font-size: 12px; font-weight: 600; color: var(--muted);
-  display: flex; align-items: center; gap: 6px;
+  display: flex; flex-direction: column; gap: 4px;
 }
-.stat-chip .num { color: var(--ink); font-size: 15px; font-weight: 800; }
-.stat-chip.accent { border-color: var(--brand); color: var(--brand); }
+.stat-chip .num { color: var(--ink); font-size: 18px; font-weight: 800; }
+.stat-chip.accent { border-color: var(--brand); background: var(--brand-bg); color: var(--brand); }
 .stat-chip.accent .num { color: var(--brand); }
+
+/* ── Chart Container ── */
+.charts-container {
+  display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+  gap: 16px; margin-bottom: 24px;
+}
+.chart-box {
+  background: var(--card); border: 1px solid var(--line);
+  border-radius: 14px; padding: 16px; min-height: 250px;
+}
+.chart-box h3 { font-size: 13px; font-weight: 700; margin-bottom: 12px; color: var(--ink); }
+.chart-box canvas { max-width: 100%; }
+
+/* ── Tags cloud ── */
+.tags-section {
+  margin-bottom: 20px; background: var(--card); border: 1px solid var(--line);
+  border-radius: 14px; padding: 12px 14px;
+}
+.tags-label { font-size: 12px; font-weight: 700; color: var(--muted); margin-bottom: 8px; }
+.tags-cloud { display: flex; flex-wrap: wrap; gap: 6px; }
+.tag-item {
+  background: var(--line-light); color: var(--sub); 
+  border-radius: 12px; padding: 4px 10px; font-size: 11px;
+  cursor: pointer; border: 1px solid transparent; transition: all 0.15s;
+}
+.tag-item:hover { border-color: var(--brand); color: var(--brand); }
 
 /* ── Toolbar ── */
 .toolbar {
@@ -674,22 +723,40 @@ h1 { font-size: 26px; font-weight: 800; letter-spacing: -0.5px; }
   transition: border-color 0.15s;
 }
 .search-input:focus { border-color: var(--brand); }
+.search-input::placeholder { color: var(--muted); }
 .filter-group { display: flex; gap: 6px; flex-wrap: wrap; }
+.filter-divider { width: 1px; height: 20px; background: var(--line); }
 .btn-filter {
   border: 1px solid var(--line); border-radius: 999px;
-  padding: 5px 12px; font-size: 12px; font-weight: 700;
+  padding: 6px 12px; font-size: 12px; font-weight: 700;
   cursor: pointer; background: transparent; color: var(--muted);
-  transition: all 0.15s;
+  transition: all 0.15s; white-space: nowrap;
 }
 .btn-filter:hover { border-color: var(--brand); color: var(--brand); }
 .btn-filter.active { background: var(--brand); border-color: var(--brand); color: #fff; }
-.score-label { font-size: 12px; color: var(--muted); font-weight: 700; white-space: nowrap; }
-.score-select {
+.input-label { font-size: 12px; color: var(--muted); font-weight: 700; white-space: nowrap; }
+.input-group {
+  display: flex; gap: 6px; align-items: center;
+}
+.input-sm {
   border: 1px solid var(--line); border-radius: 8px;
   padding: 6px 10px; font-size: 12px; cursor: pointer;
-  background: var(--bg); color: var(--ink);
+  background: var(--bg); color: var(--ink); transition: border-color 0.15s;
 }
+.input-sm:focus { border-color: var(--brand); outline: none; }
 .result-info { font-size: 12px; color: var(--muted); margin-bottom: 16px; padding-left: 2px; }
+
+/* ── Action buttons ── */
+.action-buttons {
+  display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 16px;
+}
+.btn-action {
+  background: var(--card); border: 1px solid var(--line);
+  border-radius: 8px; padding: 7px 12px; font-size: 12px; font-weight: 600;
+  cursor: pointer; color: var(--sub); transition: all 0.15s;
+  display: flex; align-items: center; gap: 4px;
+}
+.btn-action:hover { border-color: var(--brand); color: var(--brand); }
 
 /* ── Date section ── */
 .row-block { margin-bottom: 32px; }
@@ -700,23 +767,55 @@ h1 { font-size: 26px; font-weight: 800; letter-spacing: -0.5px; }
 }
 .day-divider { flex: 1; height: 1px; background: var(--line); }
 
-/* ── Grid ── */
+/* ── Grid layout ── */
 .row-grid { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 14px; }
+.row-grid.featured { 
+  grid-template-columns: 2fr 1fr 1fr 1fr 1fr;
+  gap: 14px;
+}
+.featured-card { 
+  grid-row: span 2;
+  min-height: auto;
+}
 
 /* ── Card ── */
 .tile {
   background: var(--card); border: 1px solid var(--line);
-  border-radius: var(--radius-card); padding: 16px 16px 14px;
+  border-radius: var(--radius-card); padding: 16px;
   min-height: 300px; display: flex; flex-direction: column;
   box-shadow: var(--shadow);
   transition: transform 0.15s, box-shadow 0.15s;
+  position: relative; cursor: pointer;
+  overflow: hidden;
 }
-.tile:hover { transform: translateY(-2px); box-shadow: 0 6px 20px rgba(25,31,40,0.1); }
-[data-theme="dark"] .tile:hover { box-shadow: 0 4px 16px rgba(0,0,0,0.4); }
+.tile::before {
+  content: ''; position: absolute; top: 0; left: 0; right: 0; bottom: 0;
+  background: linear-gradient(135deg, transparent 0%, rgba(49, 130, 246, 0.03) 100%);
+  pointer-events: none;
+}
+.tile:hover { 
+  transform: translateY(-4px); 
+  box-shadow: 0 12px 24px rgba(49, 130, 246, 0.15);
+  border-color: var(--brand);
+}
+[data-theme="dark"] .tile:hover { 
+  box-shadow: 0 12px 24px rgba(77, 156, 248, 0.25);
+}
+.tile.visited { opacity: 0.85; }
 .tile-head {
   display: flex; justify-content: space-between;
-  align-items: flex-start; margin-bottom: 10px; gap: 6px;
+  align-items: flex-start; margin-bottom: 10px; gap: 6px; z-index: 1; position: relative;
 }
+.tile-actions {
+  display: flex; gap: 6px;
+}
+.btn-star {
+  background: none; border: none; font-size: 16px; cursor: pointer;
+  transition: all 0.15s;
+  filter: drop-shadow(0 1px 2px rgba(0,0,0,0.1));
+}
+.btn-star:hover { transform: scale(1.2); }
+.btn-star.active { color: var(--yellow); }
 .badge-wrap { display: flex; gap: 4px; align-items: center; flex-wrap: wrap; }
 .badge {
   background: var(--brand-bg); color: var(--brand);
@@ -737,10 +836,17 @@ h1 { font-size: 26px; font-weight: 800; letter-spacing: -0.5px; }
   color: var(--ink);
   display: -webkit-box; -webkit-line-clamp: 3;
   -webkit-box-orient: vertical; overflow: hidden;
+  position: relative; z-index: 1;
+}
+.featured-card .card-title {
+  font-size: 16px; -webkit-line-clamp: 4;
 }
 .content-wrap {
   position: relative; flex: 1; overflow: hidden;
   max-height: 160px; margin-bottom: 12px;
+}
+.featured-card .content-wrap {
+  max-height: 200px;
 }
 .content-wrap::after {
   content: ""; position: absolute; bottom: 0; left: 0; right: 0;
@@ -750,9 +856,9 @@ h1 { font-size: 26px; font-weight: 800; letter-spacing: -0.5px; }
 }
 .content {
   font-size: 12px; line-height: 1.6; color: var(--sub);
+  position: relative; z-index: 1;
 }
 .content p { margin-bottom: 4px; }
-[data-theme="dark"] .content p { color: var(--sub); }
 .content h1, .content h2, .content h3,
 .content h4, .content h5, .content h6 {
   font-size: 12px; font-weight: 700; margin: 6px 0 2px; color: var(--ink);
@@ -769,8 +875,7 @@ h1 { font-size: 26px; font-weight: 800; letter-spacing: -0.5px; }
 }
 .content strong { color: var(--ink); font-weight: 700; }
 
-/* ── Card footer ── */
-.card-footer { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+.card-footer { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; position: relative; z-index: 1; }
 .card-link {
   text-decoration: none; color: var(--brand); font-size: 12px; font-weight: 700;
   padding: 5px 12px; border: 1px solid var(--brand);
@@ -782,6 +887,29 @@ h1 { font-size: 26px; font-weight: 800; letter-spacing: -0.5px; }
   color: var(--muted); border-color: var(--line); font-weight: 600;
 }
 .card-link.alt:hover { background: var(--line); color: var(--ink); }
+
+/* ── Modal ── */
+.modal-overlay {
+  display: none; position: fixed; top: 0; left: 0; right: 0; bottom: 0;
+  background: rgba(0,0,0,0.5); z-index: 1000; animation: fadeIn 0.2s;
+}
+.modal-overlay.active { display: flex; align-items: flex-start; justify-content: center; padding-top: 40px; }
+.modal-content {
+  background: var(--card); border: 1px solid var(--line);
+  border-radius: 16px; max-width: 700px; width: 90%; max-height: 85vh;
+  overflow-y: auto; position: relative; animation: slideUp 0.3s;
+}
+.modal-close {
+  position: sticky; top: 0; right: 0; padding: 12px 16px;
+  background: var(--card); border: none; font-size: 24px; cursor: pointer;
+  color: var(--muted); float: right; z-index: 10;
+}
+.modal-close:hover { color: var(--brand); }
+.modal-body { padding: 20px; clear: both; }
+.modal-body h3 { font-size: 18px; font-weight: 800; margin-bottom: 12px; color: var(--ink); }
+.modal-body .content { font-size: 13px; }
+@keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
+@keyframes slideUp { from { transform: translateY(20px); opacity: 0; } to { transform: translateY(0); opacity: 1; } }
 
 /* ── Empty state ── */
 .empty-state {
@@ -806,36 +934,63 @@ h1 { font-size: 26px; font-weight: 800; letter-spacing: -0.5px; }
 .btn-page:disabled { opacity: 0.3; cursor: not-allowed; }
 .btn-page.active { background: var(--brand); border-color: var(--brand); color: #fff; }
 
-@media (max-width: 1200px) { .row-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); } }
-@media (max-width: 860px)  { .row-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
-@media (max-width: 560px)  {
+/* ── Responsive ── */
+@media (max-width: 1200px) { 
+  .row-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+  .row-grid.featured { grid-template-columns: 1.5fr 1fr 1fr; }
+  .charts-container { grid-template-columns: repeat(2, 1fr); }
+}
+@media (max-width: 860px) {
+  .row-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .row-grid.featured { grid-template-columns: 1fr 1fr; }
+  .charts-container { grid-template-columns: 1fr; }
+  .tile:hover { transform: translateY(-2px); }
+}
+@media (max-width: 560px) {
+  .wrap { padding: 16px 12px 40px; }
   .row-grid { grid-template-columns: 1fr; }
+  .row-grid.featured { grid-template-columns: 1fr; }
   h1 { font-size: 22px; }
-  .stats-bar { gap: 8px; }
+  .stats-container { grid-template-columns: repeat(2, 1fr); }
+  .tabs-section { gap: 4px; }
+  .toolbar { flex-direction: column; }
+  .search-input { min-width: 100%; }
+  .filter-group { width: 100%; }
+  .modal-content { width: 95%; }
 }
 """
 
     js = """
 const PAPERS = __CARDS_JSON__;
 const PAGE_SIZE = 10;
+let currentTab = 'all';
 let currentSource = 'ALL';
 let currentSort = 'score';
 let currentPage = 1;
 let filtered = [];
+let favorites = JSON.parse(localStorage.getItem('favorites')) || [];
+let searchHistory = JSON.parse(localStorage.getItem('searchHistory')) || [];
+let visited = JSON.parse(localStorage.getItem('visited')) || [];
 
 function toggleTheme() {
   const html = document.documentElement;
   const next = html.dataset.theme === 'dark' ? 'light' : 'dark';
   html.dataset.theme = next;
-  document.getElementById('themeBtn').textContent = next === 'dark' ? '라이트 모드' : '다크 모드';
+  document.getElementById('themeBtn').textContent = next === 'dark' ? '☀️ 라이트 모드' : '🌙 다크 모드';
   localStorage.setItem('theme', next);
+}
+
+function toggleTab(tab) {
+  currentTab = tab;
+  document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+  event.target.classList.add('active');
+  currentPage = 1;
+  applyFilters();
 }
 
 function setSource(btn) {
   currentSource = btn.dataset.source;
-  document.querySelectorAll('#sourceFilters .btn-filter').forEach(function(b) {
-    b.classList.remove('active');
-  });
+  document.querySelectorAll('#sourceFilters .btn-filter').forEach(b => b.classList.remove('active'));
   btn.classList.add('active');
   currentPage = 1;
   applyFilters();
@@ -843,24 +998,102 @@ function setSource(btn) {
 
 function setSort(btn) {
   currentSort = btn.dataset.sort;
-  document.querySelectorAll('#sortGroup .btn-filter').forEach(function(b) {
-    b.classList.remove('active');
-  });
+  document.querySelectorAll('#sortGroup .btn-filter').forEach(b => b.classList.remove('active'));
   btn.classList.add('active');
   currentPage = 1;
   render();
 }
 
+function toggleFavorite(id, e) {
+  e.stopPropagation();
+  const idx = favorites.indexOf(id);
+  if (idx === -1) {
+    favorites.push(id);
+  } else {
+    favorites.splice(idx, 1);
+  }
+  localStorage.setItem('favorites', JSON.stringify(favorites));
+  applyFilters();
+}
+
+function recordVisit(id) {
+  if (!visited.includes(id)) {
+    visited.push(id);
+  }
+  localStorage.setItem('visited', JSON.stringify(visited));
+}
+
+function recordSearch(query) {
+  if (query.trim() && !searchHistory.includes(query)) {
+    searchHistory.unshift(query);
+    if (searchHistory.length > 10) searchHistory.pop();
+    localStorage.setItem('searchHistory', JSON.stringify(searchHistory));
+  }
+}
+
+function downloadJSON() {
+  const data = JSON.stringify(filtered, null, 2);
+  const blob = new Blob([data], { type: 'application/json' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = 'papers_' + new Date().toISOString().split('T')[0] + '.json';
+  a.click();
+  URL.revokeObjectURL(url);
+}
+
+function downloadCSV() {
+  const headers = ['제목', '출처', '스코어', '리뷰여부', '링크'];
+  const rows = filtered.map(p => [
+    '"' + p.title.replace(/"/g, '""') + '"',
+    p.source,
+    p.score,
+    p.hasReview ? '예' : '아니오',
+    p.link
+  ]);
+  const csv = [headers.join(','), ...rows.map(r => r.join(','))].join('\\n');
+  const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = 'papers_' + new Date().toISOString().split('T')[0] + '.csv';
+  a.click();
+  URL.revokeObjectURL(url);
+}
+
+function shareCurrentView() {
+  const state = {
+    tab: currentTab,
+    source: currentSource,
+    sort: currentSort,
+    minScore: document.getElementById('scoreFilter').value,
+    search: document.getElementById('searchInput').value
+  };
+  const url = window.location.href.split('#')[0] + '#' + btoa(JSON.stringify(state));
+  const text = '현재 필터 상태: ' + url;
+  if (navigator.clipboard) {
+    navigator.clipboard.writeText(url).then(() => alert('링크가 복사되었습니다!'));
+  } else {
+    alert('공유 링크:\\n' + url);
+  }
+}
+
 function applyFilters() {
   const query = (document.getElementById('searchInput').value || '').toLowerCase();
   const minScore = parseInt(document.getElementById('scoreFilter').value) || 0;
+  
+  recordSearch(query);
+  
   filtered = PAPERS.filter(function(p) {
+    if (currentTab === 'reviewed' && !p.hasReview) return false;
+    if (currentTab === 'favorites' && !favorites.includes(p.id)) return false;
     if (currentSource !== 'ALL' && p.source !== currentSource) return false;
     if (p.score < minScore) return false;
     if (query && p.title.toLowerCase().indexOf(query) === -1) return false;
     return true;
   });
   currentPage = 1;
+  renderStats();
   render();
 }
 
@@ -873,12 +1106,40 @@ function mdToHtml(text) {
   }
 }
 
-function renderCard(p) {
+function openModal(p, e) {
+  if (e) e.preventDefault();
+  recordVisit(p.id);
+  const modal = document.getElementById('detailModal');
+  document.getElementById('modalTitle').textContent = p.title;
+  document.getElementById('modalBadges').innerHTML = '<span class="badge">' + p.source + '</span>' + (p.hasReview ? '<span class="review-tag">리뷰</span>' : '');
+  document.getElementById('modalContent').innerHTML = mdToHtml(p.content);
+  document.getElementById('modalScore').textContent = 'Score: ' + p.score;
+  document.getElementById('modalLink').href = p.link;
+  modal.classList.add('active');
+}
+
+function closeModal() {
+  document.getElementById('detailModal').classList.remove('active');
+}
+
+function renderCard(p, isFeatured) {
   const article = document.createElement('article');
-  article.className = 'tile';
+  article.className = 'tile' + (isFeatured ? ' featured-card' : '') + (visited.includes(p.id) ? ' visited' : '');
+  article.title = p.title;
+  article.style.cursor = 'pointer';
+  article.onclick = function(e) { openModal(p, e); };
 
   const head = document.createElement('div');
   head.className = 'tile-head';
+
+  const actions = document.createElement('div');
+  actions.className = 'tile-actions';
+  const starBtn = document.createElement('button');
+  starBtn.className = 'btn-star' + (favorites.includes(p.id) ? ' active' : '');
+  starBtn.textContent = '⭐';
+  starBtn.title = favorites.includes(p.id) ? '즐겨찾기 제거' : '즐겨찾기';
+  starBtn.onclick = function(e) { toggleFavorite(p.id, e); };
+  actions.appendChild(starBtn);
 
   const badgeWrap = document.createElement('span');
   badgeWrap.className = 'badge-wrap';
@@ -895,8 +1156,9 @@ function renderCard(p) {
 
   const scoreEl = document.createElement('span');
   scoreEl.className = 'score';
-  scoreEl.textContent = 'S ' + p.score;
+  scoreEl.textContent = 'S' + p.score;
 
+  head.appendChild(actions);
   head.appendChild(badgeWrap);
   head.appendChild(scoreEl);
 
@@ -919,6 +1181,7 @@ function renderCard(p) {
   linkEl.href = p.link;
   linkEl.target = '_blank';
   linkEl.rel = 'noreferrer';
+  linkEl.onclick = function(e) { e.stopPropagation(); recordVisit(p.id); };
   linkEl.textContent = p.hasDoi ? 'DOI' : '논문 보기';
   footer.appendChild(linkEl);
 
@@ -928,6 +1191,7 @@ function renderCard(p) {
     altEl.href = p.altLink;
     altEl.target = '_blank';
     altEl.rel = 'noreferrer';
+    altEl.onclick = function(e) { e.stopPropagation(); recordVisit(p.id); };
     altEl.textContent = '원문';
     footer.appendChild(altEl);
   }
@@ -941,16 +1205,19 @@ function renderCard(p) {
 
 function renderStats() {
   const total = PAPERS.length;
-  const reviewed = PAPERS.filter(function(p) { return p.hasReview; }).length;
-  const sources = [...new Set(PAPERS.map(function(p) { return p.source; }))].length;
+  const reviewed = PAPERS.filter(p => p.hasReview).length;
+  const sources = [...new Set(PAPERS.map(p => p.source))].length;
+  const allFavs = PAPERS.filter(p => favorites.includes(p.id)).length;
+  
   const sb = document.getElementById('statsBar');
   sb.innerHTML = '';
   const chips = [
-    { num: total, label: '논문' },
+    { num: total, label: '모든 논문' },
     { num: reviewed, label: '리뷰 완료', accent: true },
+    { num: allFavs, label: '즐겨찾기' },
     { num: sources, label: '출처' },
   ];
-  chips.forEach(function(c) {
+  chips.forEach(c => {
     const el = document.createElement('div');
     el.className = 'stat-chip' + (c.accent ? ' accent' : '');
     const num = document.createElement('span');
@@ -959,6 +1226,44 @@ function renderStats() {
     el.appendChild(num);
     el.appendChild(document.createTextNode(' ' + c.label));
     sb.appendChild(el);
+  });
+
+  renderSourceChart();
+}
+
+function renderSourceChart() {
+  const sourceCounts = {};
+  PAPERS.forEach(p => {
+    sourceCounts[p.source] = (sourceCounts[p.source] || 0) + 1;
+  });
+  
+  const canvas = document.getElementById('sourceChart');
+  if (!canvas || typeof Chart === 'undefined') return;
+  
+  if (canvas.chart) canvas.chart.destroy();
+  
+  const isDark = document.documentElement.dataset.theme === 'dark';
+  const textColor = isDark ? '#a0aab4' : '#6b7684';
+  const borderColor = isDark ? '#2c3444' : '#e5e8eb';
+  
+  canvas.chart = new Chart(canvas, {
+    type: 'doughnut',
+    data: {
+      labels: Object.keys(sourceCounts),
+      datasets: [{
+        data: Object.values(sourceCounts),
+        backgroundColor: ['#3182f6', '#05c46b', '#f59e0b'],
+        borderColor: [borderColor, borderColor, borderColor],
+        borderWidth: 2
+      }]
+    },
+    options: {
+      responsive: true,
+      maintainAspectRatio: true,
+      plugins: {
+        legend: { labels: { color: textColor, font: { size: 11 } } }
+      }
+    }
   });
 }
 
@@ -987,6 +1292,9 @@ function render() {
   }
 
   const sorted = page.slice().sort(function(a, b) {
+    if (currentSort === 'review') {
+      return (b.hasReview ? 1 : 0) - (a.hasReview ? 1 : 0) || b.score - a.score;
+    }
     if (currentSort === 'date') {
       return b.day < a.day ? -1 : b.day > a.day ? 1 : b.score - a.score;
     }
@@ -994,12 +1302,12 @@ function render() {
   });
 
   const groups = {};
-  sorted.forEach(function(p) {
+  sorted.forEach((p, idx) => {
     if (!groups[p.day]) groups[p.day] = [];
-    groups[p.day].push(p);
+    groups[p.day].push({...p, index: idx});
   });
 
-  Object.keys(groups).sort().reverse().forEach(function(day) {
+  Object.keys(groups).sort().reverse().forEach(day => {
     const section = document.createElement('section');
     section.className = 'row-block';
 
@@ -1014,8 +1322,10 @@ function render() {
     rowHead.appendChild(divider);
 
     const grid = document.createElement('div');
-    grid.className = 'row-grid';
-    groups[day].forEach(function(p) { grid.appendChild(renderCard(p)); });
+    grid.className = 'row-grid' + (start === 0 && groups[day][0].index === 0 ? ' featured' : '');
+    groups[day].forEach((p, idx) => {
+      grid.appendChild(renderCard(p, start === 0 && idx === 0));
+    });
 
     section.appendChild(rowHead);
     section.appendChild(grid);
@@ -1027,26 +1337,26 @@ function render() {
   if (totalPages > 1) {
     const prev = document.createElement('button');
     prev.className = 'btn-page';
-    prev.textContent = '이전';
+    prev.textContent = '← 이전';
     prev.disabled = currentPage === 1;
-    prev.addEventListener('click', function() { goPage(currentPage - 1); });
+    prev.addEventListener('click', () => goPage(currentPage - 1));
     pg.appendChild(prev);
 
     for (let i = 1; i <= totalPages; i++) {
-      (function(n) {
+      (n => {
         const btn = document.createElement('button');
         btn.className = 'btn-page' + (n === currentPage ? ' active' : '');
         btn.textContent = n;
-        btn.addEventListener('click', function() { goPage(n); });
+        btn.addEventListener('click', () => goPage(n));
         pg.appendChild(btn);
       })(i);
     }
 
     const next = document.createElement('button');
     next.className = 'btn-page';
-    next.textContent = '다음';
+    next.textContent = '다음 →';
     next.disabled = currentPage === totalPages;
-    next.addEventListener('click', function() { goPage(currentPage + 1); });
+    next.addEventListener('click', () => goPage(currentPage + 1));
     pg.appendChild(next);
   }
 }
@@ -1061,11 +1371,17 @@ function goPage(p) {
   const saved = localStorage.getItem('theme');
   if (saved) {
     document.documentElement.dataset.theme = saved;
-    document.getElementById('themeBtn').textContent = saved === 'dark' ? '라이트 모드' : '다크 모드';
+    document.getElementById('themeBtn').textContent = saved === 'dark' ? '☀️ 라이트 모드' : '🌙 다크 모드';
   }
   filtered = PAPERS.slice();
   renderStats();
   render();
+  document.addEventListener('keydown', e => {
+    if (e.key === 'Escape') closeModal();
+  });
+  document.getElementById('detailModal').addEventListener('click', e => {
+    if (e.target.id === 'detailModal') closeModal();
+  });
 })();
 """.replace("__CARDS_JSON__", cards_json)
 
@@ -1077,47 +1393,90 @@ function goPage(p) {
   <title>논문 요약 대시보드</title>
   <script src="https://cdn.jsdelivr.net/npm/marked@9/marked.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/dompurify@3/dist/purify.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4/dist/chart.min.js"></script>
   <style>{css}</style>
 </head>
 <body>
   <main class="wrap">
     <header class="site-header">
       <div class="header-left">
-        <h1>논문 요약 대시보드</h1>
+        <h1>📚 논문 대시보드</h1>
         <span class="subtitle">AI &amp; Education 관련 최신 논문 큐레이션</span>
       </div>
       <div class="header-right">
-        <span class="updated">업데이트: {now}</span>
-        <button class="btn-theme" id="themeBtn" onclick="toggleTheme()">다크 모드</button>
+        <span class="updated">✏️ {now}</span>
+        <button class="btn-icon btn-theme" id="themeBtn" onclick="toggleTheme()" title="테마 전환">🌙 다크 모드</button>
       </div>
     </header>
-    <div class="stats-bar" id="statsBar"></div>
+
+    <div class="tabs-section">
+      <button class="tab-btn active" data-tab="all" onclick="toggleTab('all')">전체</button>
+      <button class="tab-btn" data-tab="reviewed" onclick="toggleTab('reviewed')">리뷰 완료</button>
+      <button class="tab-btn" data-tab="favorites" onclick="toggleTab('favorites')">⭐ 즐겨찾기</button>
+    </div>
+
+    <div class="stats-container" id="statsBar"></div>
+
+    <div class="charts-container">
+      <div class="chart-box">
+        <h3>출처별 분포</h3>
+        <canvas id="sourceChart"></canvas>
+      </div>
+    </div>
+
+    <div class="action-buttons">
+      <button class="btn-action" onclick="downloadJSON()" title="JSON 다운로드">📥 JSON</button>
+      <button class="btn-action" onclick="downloadCSV()" title="CSV 다운로드">📊 CSV</button>
+      <button class="btn-action" onclick="shareCurrentView()" title="현재 필터 공유">🔗 공유</button>
+    </div>
+
     <div class="toolbar">
       <input class="search-input" id="searchInput" type="search"
-             placeholder="제목 검색..." oninput="applyFilters()" />
+             placeholder="🔍 제목 검색..." oninput="applyFilters()" />
+      <div class="filter-divider"></div>
       <div class="filter-group" id="sourceFilters">
         <button class="btn-filter active" data-source="ALL" onclick="setSource(this)">전체</button>
         <button class="btn-filter" data-source="ARXIV" onclick="setSource(this)">arXiv</button>
         <button class="btn-filter" data-source="ERIC" onclick="setSource(this)">ERIC</button>
         <button class="btn-filter" data-source="OPENALEX" onclick="setSource(this)">OpenAlex</button>
       </div>
+      <div class="filter-divider"></div>
       <div class="filter-group" id="sortGroup">
         <button class="btn-filter active" data-sort="score" onclick="setSort(this)">점수순</button>
         <button class="btn-filter" data-sort="date" onclick="setSort(this)">최신순</button>
+        <button class="btn-filter" data-sort="review" onclick="setSort(this)">리뷰순</button>
       </div>
-      <span class="score-label">최소 점수</span>
-      <select class="score-select" id="scoreFilter" onchange="applyFilters()">
-        <option value="0">전체</option>
-        <option value="5">5+</option>
-        <option value="10">10+</option>
-        <option value="15">15+</option>
-        <option value="20">20+</option>
-      </select>
+      <div class="filter-divider"></div>
+      <div class="input-group">
+        <label class="input-label">최소 점수</label>
+        <select class="input-sm" id="scoreFilter" onchange="applyFilters()">
+          <option value="0">전체</option>
+          <option value="5">5+</option>
+          <option value="10">10+</option>
+          <option value="15">15+</option>
+          <option value="20">20+</option>
+        </select>
+      </div>
     </div>
+
     <p class="result-info" id="resultInfo"></p>
     <div id="dashboard"></div>
     <nav class="pagination" id="pagination"></nav>
   </main>
+
+  <div class="modal-overlay" id="detailModal">
+    <div class="modal-content">
+      <button class="modal-close" onclick="closeModal()">&times;</button>
+      <div class="modal-body">
+        <div id="modalBadges" style="margin-bottom: 12px;"></div>
+        <h3 id="modalTitle"></h3>
+        <div id="modalContent" class="content" style="margin: 16px 0;"></div>
+        <div id="modalScore" style="font-size: 12px; color: var(--muted); margin-bottom: 12px;"></div>
+        <a id="modalLink" class="card-link" target="_blank" rel="noreferrer">논문 보기</a>
+      </div>
+    </div>
+  </div>
+
   <script>{js}</script>
 </body>
 </html>"""
