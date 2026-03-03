@@ -587,6 +587,8 @@ def render_dashboard_html(papers: List[Paper]) -> str:
             "altLink": paper.link if doi_link else "",
             "hasDoi": bool(paper.doi),
             "hasReview": bool(paper.review),
+            "authors": paper.authors[:3],
+            "categories": paper.categories[:5],
         })
 
     cards_json = json.dumps(all_cards_data, ensure_ascii=False).replace("</", "<\\/")
@@ -715,6 +717,8 @@ h1 { font-size: 28px; font-weight: 800; letter-spacing: -0.5px; margin-bottom: 4
   background: var(--card); border: 1px solid var(--line);
   border-radius: 14px; padding: 12px 16px; margin-bottom: 20px;
   display: flex; flex-wrap: wrap; gap: 10px; align-items: center;
+  position: sticky; top: 8px; z-index: 100;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.06);
 }
 .search-input {
   flex: 1; min-width: 160px; border: 1px solid var(--line);
@@ -953,20 +957,94 @@ h1 { font-size: 28px; font-weight: 800; letter-spacing: -0.5px; margin-bottom: 4
   h1 { font-size: 22px; }
   .stats-container { grid-template-columns: repeat(2, 1fr); }
   .tabs-section { gap: 4px; }
-  .toolbar { flex-direction: column; }
+  .toolbar { flex-direction: column; position: static; }
   .search-input { min-width: 100%; }
   .filter-group { width: 100%; }
   .modal-content { width: 95%; }
 }
+
+/* ── Score bar ── */
+.score-bar-wrap { display: flex; align-items: center; gap: 4px; flex-shrink: 0; }
+.score-dot { width: 8px; height: 8px; border-radius: 50%; display: inline-block; flex-shrink: 0; }
+.score-dot.high { background: var(--green); }
+.score-dot.mid { background: var(--yellow); }
+.score-dot.low { background: var(--muted); }
+.score-text { color: var(--muted); font-size: 11px; font-weight: 700; white-space: nowrap; }
+
+/* ── Authors on card ── */
+.card-authors {
+  font-size: 11px; color: var(--muted); margin-bottom: 6px;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+
+/* ── Category filter ── */
+.cat-filter-wrap {
+  margin-bottom: 16px; background: var(--card); border: 1px solid var(--line);
+  border-radius: 12px; padding: 10px 14px;
+}
+.cat-filter-label { font-size: 11px; font-weight: 700; color: var(--muted); margin-bottom: 8px; text-transform: uppercase; letter-spacing: 0.5px; }
+.cat-filter-tags { display: flex; flex-wrap: wrap; gap: 6px; }
+.cat-tag {
+  background: var(--line-light); color: var(--sub);
+  border: 1px solid transparent; border-radius: 999px; padding: 3px 10px;
+  font-size: 11px; cursor: pointer; transition: all 0.15s;
+}
+.cat-tag:hover { border-color: var(--brand); color: var(--brand); }
+.cat-tag.active { background: var(--brand); color: #fff; border-color: var(--brand); }
+.cat-tag-clear {
+  color: var(--muted); font-size: 11px; cursor: pointer; margin-right: 4px;
+  padding: 3px 8px; border: 1px solid var(--line); border-radius: 999px;
+  background: transparent; transition: all 0.15s;
+}
+.cat-tag-clear:hover { color: var(--brand); border-color: var(--brand); }
+
+/* ── Date filter ── */
+.input-date {
+  border: 1px solid var(--line); border-radius: 8px; padding: 5px 8px;
+  font-size: 12px; background: var(--bg); color: var(--ink);
+  cursor: pointer; transition: border-color 0.15s; max-width: 130px;
+}
+.input-date:focus { border-color: var(--brand); outline: none; }
+
+/* ── Hide visited toggle ── */
+.btn-visited {
+  border: 1px solid var(--line); border-radius: 8px;
+  padding: 6px 10px; font-size: 12px; font-weight: 600;
+  cursor: pointer; background: transparent; color: var(--muted);
+  transition: all 0.15s; white-space: nowrap;
+}
+.btn-visited:hover { border-color: var(--brand); color: var(--brand); }
+.btn-visited.active { background: var(--brand-bg); border-color: var(--brand); color: var(--brand); }
+
+/* ── Back to top ── */
+.btn-back-top {
+  position: fixed; bottom: 28px; right: 24px;
+  background: var(--brand); color: #fff; border: none;
+  border-radius: 50%; width: 44px; height: 44px;
+  font-size: 20px; cursor: pointer; display: none;
+  align-items: center; justify-content: center;
+  box-shadow: 0 4px 16px rgba(49,130,246,0.35);
+  z-index: 500; transition: all 0.2s;
+}
+.btn-back-top.visible { display: flex; }
+.btn-back-top:hover { transform: translateY(-2px); box-shadow: 0 8px 20px rgba(49,130,246,0.45); }
+
+/* ── Search hint ── */
+.search-wrap { position: relative; flex: 1; min-width: 160px; }
+.search-hint { position: absolute; right: 10px; top: 50%; transform: translateY(-50%); font-size: 10px; color: var(--muted); pointer-events: none; background: var(--bg); padding: 1px 4px; border-radius: 4px; border: 1px solid var(--line); }
 """
 
     js = """
 const PAPERS = __CARDS_JSON__;
-const PAGE_SIZE = 10;
+let PAGE_SIZE = 10;
 let currentTab = 'all';
 let currentSource = 'ALL';
 let currentSort = 'score';
 let currentPage = 1;
+let currentCategory = '';
+let currentMinDate = '';
+let currentMaxDate = '';
+let hideVisited = false;
 let filtered = [];
 let favorites = JSON.parse(localStorage.getItem('favorites')) || [];
 let searchHistory = JSON.parse(localStorage.getItem('searchHistory')) || [];
@@ -1081,18 +1159,31 @@ function shareCurrentView() {
 function applyFilters() {
   const query = (document.getElementById('searchInput').value || '').toLowerCase();
   const minScore = parseInt(document.getElementById('scoreFilter').value) || 0;
-  
+  const minDateEl = document.getElementById('minDateFilter');
+  const maxDateEl = document.getElementById('maxDateFilter');
+  currentMinDate = minDateEl ? minDateEl.value : '';
+  currentMaxDate = maxDateEl ? maxDateEl.value : '';
+
   recordSearch(query);
-  
+
   filtered = PAPERS.filter(function(p) {
     if (currentTab === 'reviewed' && !p.hasReview) return false;
     if (currentTab === 'favorites' && !favorites.includes(p.id)) return false;
+    if (hideVisited && visited.includes(p.id)) return false;
     if (currentSource !== 'ALL' && p.source !== currentSource) return false;
     if (p.score < minScore) return false;
-    if (query && p.title.toLowerCase().indexOf(query) === -1) return false;
+    if (currentCategory && !(p.categories || []).some(function(c) { return c === currentCategory; })) return false;
+    if (currentMinDate && p.day < currentMinDate) return false;
+    if (currentMaxDate && p.day > currentMaxDate) return false;
+    if (query) {
+      const inTitle = p.title.toLowerCase().indexOf(query) !== -1;
+      const inContent = (p.content || '').toLowerCase().indexOf(query) !== -1;
+      if (!inTitle && !inContent) return false;
+    }
     return true;
   });
   currentPage = 1;
+  saveHashState();
   renderStats();
   render();
 }
@@ -1154,17 +1245,34 @@ function renderCard(p, isFeatured) {
     badgeWrap.appendChild(rt);
   }
 
-  const scoreEl = document.createElement('span');
-  scoreEl.className = 'score';
-  scoreEl.textContent = 'S' + p.score;
+  const scoreWrap = document.createElement('span');
+  scoreWrap.className = 'score-bar-wrap';
+  const dot = document.createElement('span');
+  const scoreLevel = p.score >= 20 ? 'high' : p.score >= 10 ? 'mid' : 'low';
+  dot.className = 'score-dot ' + scoreLevel;
+  const scoreText = document.createElement('span');
+  scoreText.className = 'score-text';
+  scoreText.textContent = 'S' + p.score;
+  scoreWrap.appendChild(dot);
+  scoreWrap.appendChild(scoreText);
 
   head.appendChild(actions);
   head.appendChild(badgeWrap);
-  head.appendChild(scoreEl);
+  head.appendChild(scoreWrap);
 
   const titleEl = document.createElement('h3');
   titleEl.className = 'card-title';
   titleEl.textContent = p.title;
+
+  const authorsEl = document.createElement('div');
+  authorsEl.className = 'card-authors';
+  const authorList = p.authors || [];
+  if (authorList.length > 0) {
+    const shown = authorList.slice(0, 2);
+    authorsEl.textContent = shown.join(', ') + (authorList.length > 2 ? ' 외 ' + (authorList.length - 2) + '명' : '');
+  } else {
+    authorsEl.style.display = 'none';
+  }
 
   const contentWrap = document.createElement('div');
   contentWrap.className = 'content-wrap';
@@ -1198,6 +1306,7 @@ function renderCard(p, isFeatured) {
 
   article.appendChild(head);
   article.appendChild(titleEl);
+  article.appendChild(authorsEl);
   article.appendChild(contentWrap);
   article.appendChild(footer);
   return article;
@@ -1208,20 +1317,25 @@ function renderStats() {
   const reviewed = PAPERS.filter(p => p.hasReview).length;
   const sources = [...new Set(PAPERS.map(p => p.source))].length;
   const allFavs = PAPERS.filter(p => favorites.includes(p.id)).length;
-  
+  const avgScore = total > 0 ? Math.round(PAPERS.reduce((s, p) => s + p.score, 0) / total) : 0;
+  const latestDay = PAPERS.map(p => p.day).filter(d => d && d !== '명시되지 않음').sort().reverse()[0] || '-';
+
   const sb = document.getElementById('statsBar');
   sb.innerHTML = '';
   const chips = [
     { num: total, label: '모든 논문' },
     { num: reviewed, label: '리뷰 완료', accent: true },
     { num: allFavs, label: '즐겨찾기' },
-    { num: sources, label: '출처' },
+    { num: avgScore, label: '평균 점수' },
+    { num: sources, label: '출처 수' },
+    { num: latestDay, label: '최신 날짜', isText: true },
   ];
   chips.forEach(c => {
     const el = document.createElement('div');
     el.className = 'stat-chip' + (c.accent ? ' accent' : '');
     const num = document.createElement('span');
     num.className = 'num';
+    if (c.isText) num.style.fontSize = '13px';
     num.textContent = c.num;
     el.appendChild(num);
     el.appendChild(document.createTextNode(' ' + c.label));
@@ -1367,6 +1481,137 @@ function goPage(p) {
   window.scrollTo({ top: 0, behavior: 'smooth' });
 }
 
+function toggleHideVisited() {
+  hideVisited = !hideVisited;
+  const btn = document.getElementById('hideVisitedBtn');
+  if (btn) btn.classList.toggle('active', hideVisited);
+  currentPage = 1;
+  applyFilters();
+}
+
+function setPageSize(val) {
+  PAGE_SIZE = parseInt(val) || 10;
+  currentPage = 1;
+  render();
+}
+
+function setCategory(cat) {
+  currentCategory = (currentCategory === cat) ? '' : cat;
+  renderCategoryTags();
+  currentPage = 1;
+  applyFilters();
+}
+
+function clearCategory() {
+  currentCategory = '';
+  renderCategoryTags();
+  currentPage = 1;
+  applyFilters();
+}
+
+function renderCategoryTags() {
+  const container = document.getElementById('catFilterTags');
+  if (!container) return;
+  const allCats = {};
+  PAPERS.forEach(function(p) {
+    (p.categories || []).forEach(function(c) {
+      if (c && c.trim()) allCats[c.trim()] = (allCats[c.trim()] || 0) + 1;
+    });
+  });
+  const sorted = Object.entries(allCats).sort(function(a, b) { return b[1] - a[1]; }).slice(0, 30);
+  container.innerHTML = '';
+  if (currentCategory) {
+    const clearBtn = document.createElement('button');
+    clearBtn.className = 'cat-tag-clear';
+    clearBtn.textContent = '✕ 초기화';
+    clearBtn.onclick = clearCategory;
+    container.appendChild(clearBtn);
+  }
+  sorted.forEach(function(entry) {
+    const cat = entry[0], count = entry[1];
+    const el = document.createElement('button');
+    el.className = 'cat-tag' + (currentCategory === cat ? ' active' : '');
+    el.textContent = cat + ' (' + count + ')';
+    el.onclick = function() { setCategory(cat); };
+    container.appendChild(el);
+  });
+}
+
+function saveHashState() {
+  try {
+    const state = {
+      tab: currentTab,
+      source: currentSource,
+      sort: currentSort,
+      minScore: document.getElementById('scoreFilter').value,
+      search: document.getElementById('searchInput').value,
+      cat: currentCategory,
+      minDate: currentMinDate,
+      maxDate: currentMaxDate,
+      hide: hideVisited,
+      page: currentPage,
+      pageSize: PAGE_SIZE
+    };
+    history.replaceState(null, '', '#' + btoa(encodeURIComponent(JSON.stringify(state))));
+  } catch(e) {}
+}
+
+function loadHashState() {
+  const hash = window.location.hash.slice(1);
+  if (!hash) return;
+  try {
+    const state = JSON.parse(decodeURIComponent(atob(hash)));
+    if (state.tab) {
+      currentTab = state.tab;
+      document.querySelectorAll('.tab-btn').forEach(function(b) {
+        b.classList.toggle('active', b.dataset.tab === state.tab);
+      });
+    }
+    if (state.source) {
+      currentSource = state.source;
+      document.querySelectorAll('#sourceFilters .btn-filter').forEach(function(b) {
+        b.classList.toggle('active', b.dataset.source === state.source);
+      });
+    }
+    if (state.sort) {
+      currentSort = state.sort;
+      document.querySelectorAll('#sortGroup .btn-filter').forEach(function(b) {
+        b.classList.toggle('active', b.dataset.sort === state.sort);
+      });
+    }
+    if (state.minScore) {
+      const el = document.getElementById('scoreFilter');
+      if (el) el.value = state.minScore;
+    }
+    if (state.search) {
+      const el = document.getElementById('searchInput');
+      if (el) el.value = state.search;
+    }
+    if (state.cat) currentCategory = state.cat;
+    if (state.minDate) {
+      currentMinDate = state.minDate;
+      const el = document.getElementById('minDateFilter');
+      if (el) el.value = state.minDate;
+    }
+    if (state.maxDate) {
+      currentMaxDate = state.maxDate;
+      const el = document.getElementById('maxDateFilter');
+      if (el) el.value = state.maxDate;
+    }
+    if (state.hide) {
+      hideVisited = state.hide;
+      const btn = document.getElementById('hideVisitedBtn');
+      if (btn) btn.classList.toggle('active', hideVisited);
+    }
+    if (state.page) currentPage = state.page;
+    if (state.pageSize) {
+      PAGE_SIZE = state.pageSize;
+      const el = document.getElementById('pageSizeSelect');
+      if (el) el.value = state.pageSize;
+    }
+  } catch(e) {}
+}
+
 (function() {
   const saved = localStorage.getItem('theme');
   if (saved) {
@@ -1374,13 +1619,23 @@ function goPage(p) {
     document.getElementById('themeBtn').textContent = saved === 'dark' ? '☀️ 라이트 모드' : '🌙 다크 모드';
   }
   filtered = PAPERS.slice();
+  loadHashState();
+  renderCategoryTags();
   renderStats();
-  render();
-  document.addEventListener('keydown', e => {
+  applyFilters();
+  document.addEventListener('keydown', function(e) {
     if (e.key === 'Escape') closeModal();
+    if (e.key === '/' && !e.ctrlKey && !e.metaKey && document.activeElement.tagName !== 'INPUT') {
+      e.preventDefault();
+      document.getElementById('searchInput').focus();
+    }
   });
-  document.getElementById('detailModal').addEventListener('click', e => {
+  document.getElementById('detailModal').addEventListener('click', function(e) {
     if (e.target.id === 'detailModal') closeModal();
+  });
+  window.addEventListener('scroll', function() {
+    const btn = document.getElementById('backToTop');
+    if (btn) btn.classList.toggle('visible', window.scrollY > 400);
   });
 })();
 """.replace("__CARDS_JSON__", cards_json)
@@ -1430,9 +1685,17 @@ function goPage(p) {
       <button class="btn-action" onclick="shareCurrentView()" title="현재 필터 공유">🔗 공유</button>
     </div>
 
+    <div class="cat-filter-wrap">
+      <div class="cat-filter-label">카테고리 필터</div>
+      <div class="cat-filter-tags" id="catFilterTags"></div>
+    </div>
+
     <div class="toolbar">
-      <input class="search-input" id="searchInput" type="search"
-             placeholder="🔍 제목 검색..." oninput="applyFilters()" />
+      <div class="search-wrap">
+        <input class="search-input" id="searchInput" type="search"
+               placeholder="🔍 제목 · 내용 검색..." oninput="applyFilters()" style="width:100%" />
+        <span class="search-hint">/ 단축키</span>
+      </div>
       <div class="filter-divider"></div>
       <div class="filter-group" id="sourceFilters">
         <button class="btn-filter active" data-source="ALL" onclick="setSource(this)">전체</button>
@@ -1457,6 +1720,23 @@ function goPage(p) {
           <option value="20">20+</option>
         </select>
       </div>
+      <div class="filter-divider"></div>
+      <div class="input-group">
+        <label class="input-label">날짜</label>
+        <input class="input-date" id="minDateFilter" type="date" onchange="applyFilters()" title="시작 날짜" />
+        <span style="font-size:11px;color:var(--muted)">~</span>
+        <input class="input-date" id="maxDateFilter" type="date" onchange="applyFilters()" title="종료 날짜" />
+      </div>
+      <div class="filter-divider"></div>
+      <div class="input-group">
+        <label class="input-label">개수</label>
+        <select class="input-sm" id="pageSizeSelect" onchange="setPageSize(this.value)">
+          <option value="10">10</option>
+          <option value="20">20</option>
+          <option value="50">50</option>
+        </select>
+      </div>
+      <button class="btn-visited" id="hideVisitedBtn" onclick="toggleHideVisited()">읽은 것 숨기기</button>
     </div>
 
     <p class="result-info" id="resultInfo"></p>
@@ -1476,6 +1756,8 @@ function goPage(p) {
       </div>
     </div>
   </div>
+
+  <button class="btn-back-top" id="backToTop" onclick="window.scrollTo({{top:0,behavior:'smooth'}})">↑</button>
 
   <script>{js}</script>
 </body>
