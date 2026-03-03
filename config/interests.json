@@ -29,9 +29,9 @@
     "tpack",
     "scaffolding"
   ],
-  "min_education_hits": 3,
+  "min_education_hits": 1,
   "min_include_hits": 1,
-  "fallback_min_education_hits": 2,
+  "fallback_min_education_hits": 1,
   "seen_state_path": "data/seen_papers.json",
   "source_limits": {
     "arxiv": 120,
@@ -39,7 +39,7 @@
     "openalex": 120
   },
   "source_weights": {
-    "arxiv": 0,
+    "arxiv": 3,
     "eric": 2,
     "openalex": 1
   },
