@@ -53,14 +53,19 @@ def load_config(config_path: Path) -> dict:
     return json.loads(config_path.read_text(encoding="utf-8"))
 
 
-def build_query(categories: List[str]) -> str:
+def build_query(categories: List[str], keywords: List[str] = None) -> str:
     if not categories:
         raise ValueError("At least one arXiv category is required.")
-    return " OR ".join(f"cat:{c}" for c in categories)
+    cat_query = "(" + " OR ".join(f"cat:{c}" for c in categories) + ")"
+    if keywords:
+        kw_parts = [f'all:"{k}"' if " " in k else f"all:{k}" for k in keywords[:10]]
+        kw_query = " OR ".join(kw_parts)
+        return f"{cat_query} AND ({kw_query})"
+    return cat_query
 
 
-def fetch_papers(categories: List[str], max_results: int) -> List[Paper]:
-    query = build_query(categories)
+def fetch_papers(categories: List[str], max_results: int, keywords: List[str] = None) -> List[Paper]:
+    query = build_query(categories, keywords)
     params = {
         "search_query": query,
         "start": 0,
@@ -1855,7 +1860,7 @@ def run(config_path: Path, dry_run: bool = False) -> List[Path]:
     eric_limit = int(source_limits.get("eric", 100))
     openalex_limit = int(source_limits.get("openalex", 100))
 
-    arxiv_papers = fetch_papers(config["categories"], arxiv_limit)
+    arxiv_papers = fetch_papers(config["categories"], arxiv_limit, keywords=include_keywords)
     eric_papers = fetch_eric_papers(include_keywords=include_keywords, max_results=eric_limit)
     openalex_papers = fetch_openalex_papers(include_keywords=include_keywords, max_results=openalex_limit)
     papers = dedupe_papers(arxiv_papers + eric_papers + openalex_papers)
