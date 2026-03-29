@@ -15,10 +15,10 @@ jobs:
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
 
       - name: Setup Python
-        uses: actions/setup-python@v5
+        uses: actions/setup-python@v6
         with:
           python-version: "3.11"
 
@@ -38,9 +38,20 @@ jobs:
           OPENALEX_EMAIL: ${{ secrets.OPENALEX_EMAIL }}
           OBSIDIAN_VAULT_PATH: obsidian
           OBSIDIAN_SUBFOLDER: 00-inbox
-        run: python src/arxiv_agent.py
+        run: |
+          set -o pipefail
+          python src/arxiv_agent.py 2>&1 | tee run-agent.log
+
+      - name: Upload run log
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: run-agent-log
+          path: run-agent.log
+          if-no-files-found: ignore
 
       - name: Upload generated notes
+        if: always()
         uses: actions/upload-artifact@v4
         with:
           name: paper-notes

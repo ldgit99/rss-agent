@@ -7,6 +7,7 @@ import re
 import smtplib
 from dataclasses import dataclass
 from datetime import datetime
+from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
 from pathlib import Path
 from typing import List
@@ -73,9 +74,13 @@ def fetch_papers(categories: List[str], max_results: int, keywords: List[str] = 
         "sortBy": "submittedDate",
         "sortOrder": "descending",
     }
-    response = requests.get(ARXIV_API_URL, params=params, timeout=30)
-    response.raise_for_status()
-    root = ET.fromstring(response.text)
+    try:
+        response = requests.get(ARXIV_API_URL, params=params, timeout=30)
+        response.raise_for_status()
+        root = ET.fromstring(response.text)
+    except Exception as exc:
+        print(f"[WARN] arXiv fetch failed: {exc}")
+        return []
 
     papers: List[Paper] = []
     for entry in root.findall("atom:entry", ATOM_NS):
@@ -284,6 +289,44 @@ def load_seen_ids(state_path: Path) -> set:
 def save_seen_ids(state_path: Path, seen_ids: set) -> None:
     state_path.parent.mkdir(parents=True, exist_ok=True)
     state_path.write_text(json.dumps(sorted(seen_ids), ensure_ascii=False, indent=2), encoding="utf-8")
+
+
+SUBSCRIBERS_PATH = Path("data/subscribers.json")
+
+
+def load_subscribers(path: Path = SUBSCRIBERS_PATH) -> list:
+    if not path.exists():
+        return []
+    try:
+        data = json.loads(path.read_text(encoding="utf-8"))
+        return data if isinstance(data, list) else []
+    except Exception:
+        return []
+
+
+def save_subscribers(subscribers: list, path: Path = SUBSCRIBERS_PATH) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(json.dumps(sorted(set(subscribers)), ensure_ascii=False, indent=2), encoding="utf-8")
+
+
+def add_subscriber(email: str, path: Path = SUBSCRIBERS_PATH) -> bool:
+    """이메일 주소를 구독자 목록에 추가. 이미 있으면 False 반환."""
+    subscribers = load_subscribers(path)
+    if email in subscribers:
+        return False
+    subscribers.append(email)
+    save_subscribers(subscribers, path)
+    return True
+
+
+def remove_subscriber(email: str, path: Path = SUBSCRIBERS_PATH) -> bool:
+    """이메일 주소를 구독자 목록에서 제거. 없으면 False 반환."""
+    subscribers = load_subscribers(path)
+    if email not in subscribers:
+        return False
+    subscribers.remove(email)
+    save_subscribers(subscribers, path)
+    return True
 
 
 def score_papers(
@@ -560,6 +603,448 @@ def render_email_markdown(papers: List[Paper]) -> str:
             ]
         )
     return "\n".join(lines)
+
+
+def normalize_inline_text(text: str) -> str:
+    return re.sub(r"\s+", " ", html.unescape(text or "")).strip()
+
+
+def truncate_text(text: str, max_len: int) -> str:
+    value = normalize_inline_text(text)
+    if len(value) <= max_len:
+        return value
+    return value[: max_len - 1].rstrip() + "…"
+
+
+def strip_markdown_frontmatter(markdown: str) -> str:
+    text = (markdown or "").strip()
+    if not text.startswith("---"):
+        return text
+    lines = text.splitlines()
+    for idx in range(1, len(lines)):
+        if lines[idx].strip() == "---":
+            return "\n".join(lines[idx + 1 :]).strip()
+    return text
+
+
+def extract_markdown_section(markdown: str, heading: str) -> str:
+    body = strip_markdown_frontmatter(markdown)
+    match = re.search(rf"(?ms)^# {re.escape(heading)}\s*\n(.*?)(?=^# |\Z)", body)
+    return match.group(1).strip() if match else ""
+
+
+def extract_markdown_bullets(section_text: str, limit: int = 3) -> List[str]:
+    items: List[str] = []
+    for line in section_text.splitlines():
+        value = line.strip()
+        if value.startswith(("- ", "* ")):
+            item = value[2:].strip()
+        else:
+            numbered = re.match(r"^\d+\.\s+(.*)$", value)
+            item = numbered.group(1).strip() if numbered else ""
+        if item:
+            items.append(normalize_inline_text(item))
+        if len(items) >= limit:
+            break
+    return items
+
+
+def extract_review_tags(review: str, limit: int = 6) -> List[str]:
+    match = re.search(r"(?m)^tags:\s*(.+)$", review or "")
+    if not match:
+        return []
+    tags: List[str] = []
+    for raw_tag in match.group(1).split(","):
+        tag = normalize_inline_text(raw_tag.lstrip("#").replace("_", " "))
+        if tag and tag not in tags:
+            tags.append(tag)
+        if len(tags) >= limit:
+            break
+    return tags
+
+
+def summarize_authors(authors: List[str], max_names: int = 2) -> str:
+    cleaned = [normalize_inline_text(author) for author in authors if normalize_inline_text(author)]
+    if not cleaned:
+        return "저자 정보 없음"
+    if len(cleaned) <= max_names:
+        return ", ".join(cleaned)
+    return f"{', '.join(cleaned[:max_names])} 외 {len(cleaned) - max_names}명"
+
+
+def build_email_digest(paper: Paper) -> dict:
+    summary = extract_markdown_section(paper.review, "Summary") or paper.summary or "명시되지 않음"
+    key_findings = extract_markdown_bullets(extract_markdown_section(paper.review, "Key Findings"), limit=3)
+    transferable = extract_markdown_bullets(extract_markdown_section(paper.review, "Transferable Insights"), limit=2)
+    if not key_findings:
+        fallback = truncate_text(summary, 110)
+        key_findings = [fallback] if fallback else []
+    return {
+        "summary": normalize_inline_text(summary) or "명시되지 않음",
+        "key_findings": key_findings,
+        "transferable": transferable,
+        "tags": extract_review_tags(paper.review, limit=5),
+    }
+
+
+def format_email_source(source: str) -> str:
+    mapping = {
+        "arxiv": "arXiv",
+        "eric": "ERIC",
+        "openalex": "OpenAlex",
+    }
+    key = normalize_inline_text(source).lower()
+    return mapping.get(key, source.upper() if source else "Unknown")
+
+
+def format_email_published(published: str) -> str:
+    value = normalize_day(published)
+    return "발행일 미상" if value == "명시되지 않음" else value
+
+
+def collect_email_topics(paper: Paper, limit: int = 4) -> List[str]:
+    topics = extract_review_tags(paper.review, limit=limit)
+    if topics:
+        return topics[:limit]
+    fallback: List[str] = []
+    for category in paper.categories:
+        value = normalize_inline_text(category).replace("_", " ")
+        if value and value not in fallback:
+            fallback.append(value)
+        if len(fallback) >= limit:
+            break
+    return fallback
+
+
+def build_email_meta_items(paper: Paper, include_score: bool = False) -> List[str]:
+    items = [format_email_source(paper.source), format_email_published(paper.published)]
+    author_text = summarize_authors(paper.authors)
+    if author_text and author_text != "저자 정보 없음":
+        items.append(author_text)
+    if include_score:
+        items.append(f"Score {paper.score}")
+    return items
+
+
+def render_email_meta_line(items: List[str]) -> str:
+    parts = []
+    for idx, item in enumerate(items):
+        safe_item = html.escape(normalize_inline_text(item))
+        if not safe_item:
+            continue
+        if idx:
+            parts.append('<span style="padding:0 8px; color:#B8AEA1;">&#8226;</span>')
+        parts.append(
+            '<span style="font-size:12px; line-height:1.7; color:#6F665D;">'
+            f"{safe_item}</span>"
+        )
+    return "".join(parts)
+
+
+def collect_top_email_tags(papers: List[Paper], limit: int = 4) -> List[str]:
+    counts = {}
+    display = {}
+    order = {}
+    for paper in papers:
+        for tag in extract_review_tags(paper.review):
+            key = tag.lower()
+            if key not in counts:
+                counts[key] = 0
+                display[key] = tag
+                order[key] = len(order)
+            counts[key] += 1
+    ranked = sorted(counts, key=lambda key: (-counts[key], order[key], key))
+    return [display[key] for key in ranked[:limit]]
+
+
+def render_email_button(label: str, url: str, variant: str = "dark") -> str:
+    href = html.escape(url, quote=True)
+    text = html.escape(label)
+    if variant == "soft":
+        background = "#F5EEE4"
+        color = "#6C5641"
+        border = "#DDCFBF"
+    else:
+        background = "#26221D"
+        color = "#FFFDF8"
+        border = "#26221D"
+    return (
+        f'<a href="{href}" '
+        f'style="display:inline-block; margin:0 8px 8px 0; padding:11px 16px; '
+        f'background:{background}; color:{color}; text-decoration:none; '
+        f'border:1px solid {border}; border-radius:999px; font-size:13px; '
+        f'font-weight:700; letter-spacing:0.01em;">{text}</a>'
+    )
+
+
+def render_email_html(papers: List[Paper]) -> str:
+    now = datetime.now().strftime("%Y.%m.%d")
+    source_counts = {}
+    for paper in papers:
+        key = format_email_source(paper.source)
+        source_counts[key] = source_counts.get(key, 0) + 1
+
+    stat_labels = [("총 리뷰", f"{len(papers)}편"), ("테마", str(len(collect_top_email_tags(papers))))]
+    for source, count in sorted(source_counts.items()):
+        stat_labels.append((source, str(count)))
+
+    stats_html = "".join(
+        (
+            '<span style="display:inline-block; margin:0 8px 8px 0; padding:11px 14px; '
+            'background:#F2EADF; border:1px solid #E6DDD0; border-radius:16px;">'
+            f'<span style="display:block; font-size:16px; line-height:1.1; font-weight:800; color:#25211C;">{html.escape(value)}</span>'
+            f'<span style="display:block; margin-top:4px; font-size:11px; letter-spacing:0.06em; text-transform:uppercase; color:#7A7168;">{html.escape(label)}</span>'
+            "</span>"
+        )
+        for label, value in stat_labels
+    )
+
+    top_tags = collect_top_email_tags(papers)
+    tags_html = "".join(
+        (
+            '<span style="display:inline-block; margin:0 8px 8px 0; padding:7px 12px; '
+            'background:#FFF7ED; border:1px solid #E8DCCB; border-radius:999px; '
+            'font-size:12px; line-height:1.2; color:#8B6A47;">'
+            f'{html.escape(tag)}</span>'
+        )
+        for tag in top_tags
+    )
+    theme_sentence = ""
+    if top_tags:
+        theme_sentence = f"이번 브리프에서는 {', '.join(top_tags[:3])} 흐름이 반복적으로 나타났습니다."
+    theme_block = (
+        '<div style="margin-top:22px; padding-top:18px; border-top:1px solid #EFE5D9;">'
+        '<div style="margin-bottom:8px; font-size:11px; letter-spacing:0.08em; text-transform:uppercase; color:#8B6A47;">주요 테마</div>'
+        f'<p style="margin:0 0 12px; font-size:14px; line-height:1.8; color:#5A534B;">{html.escape(theme_sentence)}</p>'
+        f"{tags_html}"
+        "</div>"
+        if tags_html
+        else ""
+    )
+
+    preheader = truncate_text(
+        f"{now} 교육공학 연구 리뷰 {len(papers)}편 · "
+        + ", ".join(collect_top_email_tags(papers, limit=3)),
+        120,
+    )
+
+    if not papers:
+        empty_html = """
+        <tr>
+          <td style="padding-top:16px;">
+            <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="width:100%; background:#FFFDF8; border:1px solid #E6DDD0; border-radius:24px;">
+              <tr>
+                <td style="padding:28px 24px; font-size:16px; line-height:1.8; color:#4C463F;">
+                  오늘 리뷰된 논문이 없습니다. 다음 실행에서 새 리뷰가 생성되면 같은 레이아웃으로 메일이 발송됩니다.
+                </td>
+              </tr>
+            </table>
+          </td>
+        </tr>
+        """
+        cards_html = empty_html
+    else:
+        featured_paper = papers[0]
+        featured_digest = build_email_digest(featured_paper)
+        featured_meta = render_email_meta_line(build_email_meta_items(featured_paper, include_score=True))
+        featured_link_label = "DOI 보기" if featured_paper.doi else "원문 보기"
+        featured_findings = "".join(
+            (
+                '<li style="margin:0 0 8px 20px; color:#3D3832;">'
+                f'{html.escape(item)}</li>'
+            )
+            for item in featured_digest["key_findings"]
+        )
+        featured_insight = ""
+        if featured_digest["transferable"]:
+            featured_insight = (
+                '<div style="margin-top:18px; padding:16px 18px; background:#F7F1E8; border:1px solid #E8DCCB; border-radius:16px;">'
+                '<div style="margin-bottom:8px; font-size:11px; letter-spacing:0.08em; text-transform:uppercase; color:#8B6A47;">읽어둘 이유</div>'
+                f'<div style="font-size:14px; line-height:1.8; color:#3D3832;">{html.escape(featured_digest["transferable"][0])}</div>'
+                "</div>"
+            )
+
+        featured_link = f"https://doi.org/{featured_paper.doi}" if featured_paper.doi else featured_paper.link
+        featured_buttons = render_email_button(featured_link_label, featured_link)
+        if featured_paper.pdf_link:
+            featured_buttons += render_email_button("PDF", featured_paper.pdf_link, variant="soft")
+
+        featured_tags = "".join(
+            (
+                '<span style="display:inline-block; margin:0 6px 6px 0; padding:5px 10px; '
+                'background:#F5EEE4; border:1px solid #E6DDD0; border-radius:999px; '
+                'font-size:11px; line-height:1.2; color:#7A7168;">'
+                f'{html.escape(tag)}</span>'
+            )
+            for tag in collect_email_topics(featured_paper, limit=4)
+        )
+
+        featured_card = f"""
+        <tr>
+          <td style="padding-top:16px;">
+            <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="width:100%; background:#FFFDF8; border:1px solid #E6DDD0; border-radius:24px;">
+              <tr>
+                <td style="height:8px; background:#E7D9C7; font-size:0; line-height:0;">&nbsp;</td>
+              </tr>
+              <tr>
+                <td style="padding:30px 28px 28px;">
+                  <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="width:100%;">
+                    <tr>
+                      <td style="font-size:11px; letter-spacing:0.12em; text-transform:uppercase; color:#8B6A47; font-weight:800;">대표 리뷰</td>
+                      <td align="right" style="font-size:11px; line-height:1.4; color:#8B6A47;">No. 01</td>
+                    </tr>
+                  </table>
+                  <div style="margin-top:12px; display:inline-block; padding:5px 10px; background:#F0E6D8; border-radius:999px; font-size:11px; line-height:1.2; color:#8B6A47; font-weight:700;">{html.escape(format_email_source(featured_paper.source))}</div>
+                  <div style="margin-top:12px;">{featured_meta}</div>
+                  <div style="margin-top:12px; height:1px; background:#EFE5D9;">
+                    &nbsp;
+                  </div>
+                  <h2 style="margin:0; font-family:Georgia, 'Times New Roman', serif; font-size:28px; line-height:1.35; color:#25211C;">{html.escape(normalize_inline_text(featured_paper.title))}</h2>
+                  <div style="margin-top:18px; padding-top:18px; border-top:1px solid #EFE5D9;">
+                    <div style="margin-bottom:8px; font-size:11px; letter-spacing:0.08em; text-transform:uppercase; color:#8B6A47;">에디터 노트</div>
+                    <p style="margin:0; font-size:15px; line-height:1.9; color:#322D28;">{html.escape(truncate_text(featured_digest["summary"], 400))}</p>
+                  </div>
+                  {featured_insight}
+                  <div style="margin-top:18px;">
+                    <div style="margin-bottom:8px; font-size:11px; letter-spacing:0.08em; text-transform:uppercase; color:#8B6A47;">핵심 발견</div>
+                    <ul style="margin:0; padding:0 0 0 2px; font-size:14px; line-height:1.8;">{featured_findings}</ul>
+                  </div>
+                  {'<div style="margin-top:18px;">' + featured_tags + '</div>' if featured_tags else ''}
+                  <div style="margin-top:22px;">{featured_buttons}</div>
+                </td>
+              </tr>
+            </table>
+          </td>
+        </tr>
+        """
+
+        other_cards = []
+        for idx, paper in enumerate(papers[1:], start=2):
+            digest = build_email_digest(paper)
+            meta_line = render_email_meta_line(build_email_meta_items(paper))
+            paper_link_label = "DOI 보기" if paper.doi else "읽기"
+            findings_html = "".join(
+                (
+                    '<li style="margin:0 0 6px 18px; color:#4B453E;">'
+                    f'{html.escape(item)}</li>'
+                )
+                for item in digest["key_findings"][:2]
+            )
+            link = f"https://doi.org/{paper.doi}" if paper.doi else paper.link
+            paper_tags = "".join(
+                (
+                    '<span style="display:inline-block; margin:0 6px 6px 0; padding:4px 9px; '
+                    'background:#F6F0E7; border-radius:999px; font-size:11px; line-height:1.2; color:#7A7168;">'
+                    f'{html.escape(tag)}</span>'
+                )
+                for tag in collect_email_topics(paper, limit=3)
+            )
+            transferable_note = ""
+            if digest["transferable"]:
+                transferable_note = (
+                    '<div style="margin-top:14px; padding:12px 14px; background:#F8F3EB; border:1px solid #EBDFD1; border-radius:14px;">'
+                    '<div style="margin-bottom:6px; font-size:11px; letter-spacing:0.08em; text-transform:uppercase; color:#8B6A47;">짧은 메모</div>'
+                    f'<div style="font-size:13px; line-height:1.75; color:#4B453E;">{html.escape(digest["transferable"][0])}</div>'
+                    "</div>"
+                )
+            other_cards.append(
+                f"""
+                <tr>
+                  <td style="padding-top:14px;">
+                    <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="width:100%; background:#FFFDF8; border:1px solid #E6DDD0; border-radius:22px;">
+                      <tr>
+                        <td style="padding:22px 22px 20px;">
+                          <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="width:100%;">
+                            <tr>
+                              <td style="font-size:11px; letter-spacing:0.12em; text-transform:uppercase; color:#8B6A47; font-weight:800;">Review {idx:02d}</td>
+                              <td align="right">
+                                <span style="display:inline-block; padding:5px 10px; background:#F0E6D8; border-radius:999px; font-size:11px; line-height:1.2; color:#8B6A47; font-weight:700;">{html.escape(format_email_source(paper.source))}</span>
+                              </td>
+                            </tr>
+                          </table>
+                          <div style="margin-top:12px;">{meta_line}</div>
+                          <h3 style="margin:0; font-family:Georgia, 'Times New Roman', serif; font-size:22px; line-height:1.45; color:#25211C;">{html.escape(normalize_inline_text(paper.title))}</h3>
+                          <div style="margin-top:14px; padding-top:14px; border-top:1px solid #EFE5D9;">
+                            <div style="margin-bottom:8px; font-size:11px; letter-spacing:0.08em; text-transform:uppercase; color:#8B6A47;">요약</div>
+                            <p style="margin:0; font-size:14px; line-height:1.8; color:#3D3832;">{html.escape(truncate_text(digest["summary"], 240))}</p>
+                          </div>
+                          {transferable_note}
+                          <div style="margin-top:16px;">
+                            <div style="margin-bottom:8px; font-size:11px; letter-spacing:0.08em; text-transform:uppercase; color:#8B6A47;">핵심 포인트</div>
+                            <ul style="margin:0; padding:0 0 0 2px; font-size:14px; line-height:1.7;">{findings_html}</ul>
+                          </div>
+                          {'<div style="margin-top:14px;">' + paper_tags + '</div>' if paper_tags else ''}
+                          <div style="margin-top:18px;">{render_email_button(paper_link_label, link, variant='soft')}</div>
+                        </td>
+                      </tr>
+                    </table>
+                  </td>
+                </tr>
+                """
+            )
+        cards_html = featured_card + "".join(other_cards)
+
+    return f"""<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>교육공학 연구 리뷰</title>
+  <style>
+    @media only screen and (max-width: 640px) {{
+      .container {{ width: 100% !important; }}
+      .card-pad {{ padding: 24px 18px !important; }}
+      .hero-title {{ font-size: 28px !important; }}
+      .paper-title {{ font-size: 20px !important; }}
+    }}
+  </style>
+</head>
+<body style="margin:0; padding:0; background:#F5F1E8; color:#25211C; font-family:'Helvetica Neue', Arial, sans-serif;">
+  <div style="display:none; max-height:0; overflow:hidden; opacity:0; color:transparent;">{html.escape(preheader)}</div>
+  <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="width:100%; background:#F5F1E8;">
+    <tr>
+      <td align="center" style="padding:28px 14px 40px;">
+        <table role="presentation" width="100%" cellspacing="0" cellpadding="0" class="container" style="width:100%; max-width:640px;">
+          <tr>
+            <td>
+              <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="width:100%; background:#FFFDF8; border:1px solid #E6DDD0; border-radius:28px;">
+                <tr>
+                  <td style="height:10px; background:#E7D9C7; font-size:0; line-height:0;">&nbsp;</td>
+                </tr>
+                <tr>
+                  <td class="card-pad" style="padding:30px 28px 28px;">
+                    <div style="font-size:11px; letter-spacing:0.14em; text-transform:uppercase; color:#8B6A47; font-weight:800;">Daily Research Brief</div>
+                    <h1 class="hero-title" style="margin:14px 0 0; font-family:Georgia, 'Times New Roman', serif; font-size:34px; line-height:1.2; color:#25211C;">오늘의 교육공학 연구 리뷰</h1>
+                    <p style="margin:10px 0 0; font-size:12px; line-height:1.7; letter-spacing:0.04em; color:#8B6A47;">Edition {html.escape(now)} · Reviewed Papers {len(papers)}</p>
+                    <p style="margin:16px 0 0; font-size:15px; line-height:1.9; color:#4C463F;">{html.escape(f'{now} 기준으로 리뷰 완료된 논문 {len(papers)}편을 선별해 핵심 발견과 맥락만 조용한 읽기 흐름으로 정리했습니다.')}</p>
+                    <p style="margin:10px 0 0; font-size:13px; line-height:1.8; color:#6F665D;">선정 기준: 최근성, 관심 키워드 점수, 리뷰 완료 여부를 함께 반영했습니다.</p>
+                    <div style="margin-top:22px;">{stats_html}</div>
+                    {theme_block}
+                  </td>
+                </tr>
+              </table>
+            </td>
+          </tr>
+          {cards_html}
+          <tr>
+            <td style="padding-top:16px;">
+              <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="width:100%;">
+                <tr>
+                  <td style="padding:8px 6px 0; font-size:12px; line-height:1.8; color:#7A7168; text-align:center;">
+                    이 메일은 RSS Agent가 생성한 연구 리뷰 브리프입니다. 메일 클라이언트가 HTML을 제한하면 함께 포함된 텍스트 버전으로 확인할 수 있습니다.
+                    <br />
+                    각 리뷰는 Obsidian 노트용 원문 마크다운을 바탕으로 메일용 다이제스트 형식으로 재구성되었습니다.
+                  </td>
+                </tr>
+              </table>
+            </td>
+          </tr>
+        </table>
+      </td>
+    </tr>
+  </table>
+</body>
+</html>"""
 
 
 def normalize_day(published: str) -> str:
@@ -1828,27 +2313,59 @@ def save_obsidian_notes(papers: List[Paper], output_root: Path, subfolder: str) 
     return saved_paths
 
 
-def send_email(subject: str, body: str) -> None:
+def parse_email_addresses(raw_value: str) -> List[str]:
+    return [addr.strip() for addr in re.split(r"[;,]", raw_value or "") if addr.strip()]
+
+
+def build_email_recipients() -> List[str]:
+    recipients: List[str] = []
+    seen = set()
+    for address in parse_email_addresses(os.getenv("EMAIL_TO", "")) + load_subscribers():
+        key = address.lower()
+        if key and key not in seen:
+            recipients.append(address)
+            seen.add(key)
+    return recipients
+
+
+def send_email(subject: str, text_body: str, html_body: str = "") -> None:
     host = os.getenv("SMTP_HOST")
-    port = int(os.getenv("SMTP_PORT", "587"))
+    raw_port = os.getenv("SMTP_PORT", "587")
+    try:
+        port = int(raw_port)
+    except ValueError:
+        print(f"[WARN] Invalid SMTP_PORT '{raw_port}'. Fallback to 587.")
+        port = 587
     user = os.getenv("SMTP_USER")
     password = os.getenv("SMTP_PASS")
     sender = os.getenv("EMAIL_FROM", user or "")
-    recipient = os.getenv("EMAIL_TO")
 
-    if not (host and user and password and recipient and sender):
+    if not (host and user and password and sender):
         print("[WARN] SMTP/Email env is incomplete. Skip email.")
         return
 
-    message = MIMEText(body, _charset="utf-8")
+    recipients = build_email_recipients()
+    if not recipients:
+        print("[WARN] No recipients configured. Skip email.")
+        return
+
+    message = MIMEMultipart("alternative")
     message["Subject"] = subject
     message["From"] = sender
-    message["To"] = recipient
+    message["To"] = ", ".join(recipients)
+    message.attach(MIMEText(text_body, "plain", "utf-8"))
+    if html_body:
+        message.attach(MIMEText(html_body, "html", "utf-8"))
 
-    with smtplib.SMTP(host, port, timeout=30) as server:
-        server.starttls()
-        server.login(user, password)
-        server.sendmail(sender, [recipient], message.as_string())
+    try:
+        with smtplib.SMTP(host, port, timeout=30) as server:
+            server.starttls()
+            server.login(user, password)
+            server.sendmail(sender, recipients, message.as_string())
+    except Exception as exc:
+        print(f"[WARN] Email send failed: {exc}")
+        return
+    print(f"[INFO] Email sent to {len(recipients)} recipient(s): {', '.join(recipients)}")
 
 
 def run(config_path: Path, dry_run: bool = False) -> List[Path]:
@@ -1947,6 +2464,7 @@ def run(config_path: Path, dry_run: bool = False) -> List[Path]:
     )
     reviewed_papers = [p for p in selected if p.review][:review_top_k]
     email_markdown = render_email_markdown(reviewed_papers)
+    email_html = render_email_html(reviewed_papers)
 
     obsidian_path = os.getenv("OBSIDIAN_VAULT_PATH")
     output_root = Path(obsidian_path) if obsidian_path else Path("output")
@@ -1963,7 +2481,8 @@ def run(config_path: Path, dry_run: bool = False) -> List[Path]:
     if not dry_run:
         send_email(
             subject=f"[RSS-AGENT] 교육공학 연구 리뷰-{datetime.now().strftime('%Y-%m-%d')}",
-            body=email_markdown,
+            text_body=email_markdown,
+            html_body=email_html,
         )
     return saved_paths
 
@@ -1972,9 +2491,32 @@ def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="arXiv daily recommendation agent")
     parser.add_argument("--config", default="config/interests.json", help="Path to interests json")
     parser.add_argument("--dry-run", action="store_true", help="Skip email and only save markdown")
+    parser.add_argument("--subscribe", metavar="EMAIL", help="구독자 목록에 이메일 추가")
+    parser.add_argument("--unsubscribe", metavar="EMAIL", help="구독자 목록에서 이메일 제거")
+    parser.add_argument("--list-subscribers", action="store_true", help="현재 구독자 목록 출력")
     return parser.parse_args()
 
 
 if __name__ == "__main__":
     args = parse_args()
-    run(config_path=Path(args.config), dry_run=args.dry_run)
+
+    if args.list_subscribers:
+        subs = load_subscribers()
+        if subs:
+            print(f"구독자 목록 ({len(subs)}명):")
+            for s in subs:
+                print(f"  - {s}")
+        else:
+            print("구독자가 없습니다.")
+    elif args.subscribe:
+        if add_subscriber(args.subscribe):
+            print(f"[OK] 구독 추가: {args.subscribe}")
+        else:
+            print(f"[INFO] 이미 구독 중: {args.subscribe}")
+    elif args.unsubscribe:
+        if remove_subscriber(args.unsubscribe):
+            print(f"[OK] 구독 취소: {args.unsubscribe}")
+        else:
+            print(f"[INFO] 구독자 목록에 없음: {args.unsubscribe}")
+    else:
+        run(config_path=Path(args.config), dry_run=args.dry_run)
