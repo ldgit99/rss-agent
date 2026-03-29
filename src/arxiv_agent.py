@@ -605,6 +605,78 @@ def render_email_markdown(papers: List[Paper]) -> str:
     return "\n".join(lines)
 
 
+def render_email_markdown_full(papers: List[Paper]) -> str:
+    now = datetime.now().strftime("%Y-%m-%d")
+    lines = [f"# Education Technology Research Review ({now})", ""]
+    if not papers:
+        lines.append("- No papers were reviewed today.")
+        return "\n".join(lines) + "\n"
+
+    for idx, paper in enumerate(papers, start=1):
+        digest = build_email_digest(paper)
+        doi_link = f"https://doi.org/{paper.doi}" if paper.doi else "Not specified"
+        authors = ", ".join(paper.authors) if paper.authors else "Not specified"
+        categories = ", ".join(paper.categories) if paper.categories else "Not specified"
+        pdf_link = paper.pdf_link if paper.pdf_link else "Not specified"
+        lines.extend(
+            [
+                f"## {idx}. {paper.title}",
+                f"- Source: {paper.source}",
+                f"- ID: {paper.paper_id}",
+                f"- DOI: {doi_link}",
+                f"- Published: {paper.published}",
+                f"- Authors: {authors}",
+                f"- Categories: {categories}",
+                f"- Link: {paper.link}",
+                f"- PDF: {pdf_link}",
+                f"- Keyword Score: {paper.score}",
+                "",
+                "### Abstract",
+                digest["abstract"],
+                "",
+                "### Summary",
+                digest["summary"],
+                "",
+                "### Research Logic",
+                f"- Problem: {digest['research_logic']['문제']}",
+                f"- Theory: {digest['research_logic']['이론']}",
+                f"- Design: {digest['research_logic']['설계']}",
+                f"- Findings: {digest['research_logic']['발견']}",
+                f"- Conclusion: {digest['research_logic']['결론']}",
+                "",
+                "### Key Findings",
+            ]
+        )
+        for item in digest["key_findings"] or ["Not specified"]:
+            lines.append(f"- {item}")
+        lines.extend(
+            [
+                "",
+                "### Contributions",
+                f"- Theoretical: {digest['contributions']['이론적']}",
+                f"- Methodological: {digest['contributions']['방법론적']}",
+                f"- Practical: {digest['contributions']['실천적']}",
+                "",
+                "### Limitations",
+            ]
+        )
+        for item in digest["limitations"] or ["Not specified"]:
+            lines.append(f"- {item}")
+        lines.extend(["", "### Transferable Insights"])
+        for item in digest["transferable"] or ["Not specified"]:
+            lines.append(f"- {item}")
+        lines.extend(["", "### Idea Seeds"])
+        for order, item in enumerate(digest["idea_seeds"] or ["Not specified"], start=1):
+            lines.append(f"{order}. {item}")
+        lines.extend(["", "### Citation Snippets"])
+        for item in digest["citation_snippets"] or ["Not specified"]:
+            lines.append(f"> {item}")
+        if paper.review:
+            lines.extend(["", "### Full Review", paper.review])
+        lines.append("")
+    return "\n".join(lines)
+
+
 def normalize_inline_text(text: str) -> str:
     return re.sub(r"\s+", " ", html.unescape(text or "")).strip()
 
@@ -630,6 +702,11 @@ def strip_markdown_frontmatter(markdown: str) -> str:
 def extract_markdown_section(markdown: str, heading: str) -> str:
     body = strip_markdown_frontmatter(markdown)
     match = re.search(rf"(?ms)^# {re.escape(heading)}\s*\n(.*?)(?=^# |\Z)", body)
+    return match.group(1).strip() if match else ""
+
+
+def extract_markdown_subsection(section_text: str, heading: str) -> str:
+    match = re.search(rf"(?ms)^## {re.escape(heading)}\s*\n(.*?)(?=^## |\Z)", section_text or "")
     return match.group(1).strip() if match else ""
 
 
@@ -674,15 +751,47 @@ def summarize_authors(authors: List[str], max_names: int = 2) -> str:
 
 def build_email_digest(paper: Paper) -> dict:
     summary = extract_markdown_section(paper.review, "Summary") or paper.summary or "명시되지 않음"
-    key_findings = extract_markdown_bullets(extract_markdown_section(paper.review, "Key Findings"), limit=3)
-    transferable = extract_markdown_bullets(extract_markdown_section(paper.review, "Transferable Insights"), limit=2)
+    research_logic_section = extract_markdown_section(paper.review, "Research Logic")
+    contributions_section = extract_markdown_section(paper.review, "Contributions")
+    citation_section = extract_markdown_section(paper.review, "Citation Snippets")
+    key_findings = extract_markdown_bullets(extract_markdown_section(paper.review, "Key Findings"), limit=8)
+    transferable = extract_markdown_bullets(extract_markdown_section(paper.review, "Transferable Insights"), limit=8)
+    limitations = extract_markdown_bullets(extract_markdown_section(paper.review, "Limitations"), limit=8)
+    idea_seeds = extract_markdown_bullets(extract_markdown_section(paper.review, "Idea Seeds"), limit=8)
     if not key_findings:
         fallback = truncate_text(summary, 110)
         key_findings = [fallback] if fallback else []
+    citation_snippets = []
+    for line in citation_section.splitlines():
+        value = line.strip()
+        if value.startswith(">"):
+            snippet = normalize_inline_text(value[1:].strip())
+            if snippet:
+                citation_snippets.append(snippet)
+    if not citation_snippets:
+        fallback_citation = normalize_inline_text(citation_section.replace(">", " ").strip())
+        if fallback_citation:
+            citation_snippets = [fallback_citation]
     return {
+        "abstract": normalize_inline_text(paper.summary) or "명시되지 않음",
         "summary": normalize_inline_text(summary) or "명시되지 않음",
         "key_findings": key_findings,
         "transferable": transferable,
+        "limitations": limitations,
+        "idea_seeds": idea_seeds,
+        "research_logic": {
+            "문제": normalize_inline_text(extract_markdown_subsection(research_logic_section, "Problem")) or "명시되지 않음",
+            "이론": normalize_inline_text(extract_markdown_subsection(research_logic_section, "Theory")) or "명시되지 않음",
+            "설계": normalize_inline_text(extract_markdown_subsection(research_logic_section, "Design")) or "명시되지 않음",
+            "발견": normalize_inline_text(extract_markdown_subsection(research_logic_section, "Findings")) or "명시되지 않음",
+            "결론": normalize_inline_text(extract_markdown_subsection(research_logic_section, "Conclusion")) or "명시되지 않음",
+        },
+        "contributions": {
+            "이론적": normalize_inline_text(extract_markdown_subsection(contributions_section, "Theoretical")) or "명시되지 않음",
+            "방법론적": normalize_inline_text(extract_markdown_subsection(contributions_section, "Methodological")) or "명시되지 않음",
+            "실천적": normalize_inline_text(extract_markdown_subsection(contributions_section, "Practical")) or "명시되지 않음",
+        },
+        "citation_snippets": citation_snippets,
         "tags": extract_review_tags(paper.review, limit=5),
     }
 
@@ -724,6 +833,31 @@ def build_email_meta_items(paper: Paper, include_score: bool = False) -> List[st
     if include_score:
         items.append(f"Score {paper.score}")
     return items
+
+
+def build_email_profile_rows(paper: Paper) -> dict:
+    return {
+        "논문 ID": normalize_inline_text(paper.paper_id) or "명시되지 않음",
+        "DOI": normalize_inline_text(paper.doi) or "명시되지 않음",
+        "발행일": format_email_published(paper.published),
+        "저자": ", ".join(normalize_inline_text(author) for author in paper.authors if normalize_inline_text(author))
+        or "명시되지 않음",
+        "카테고리": ", ".join(
+            normalize_inline_text(category).replace("_", " ")
+            for category in paper.categories
+            if normalize_inline_text(category)
+        )
+        or "명시되지 않음",
+        "점수": str(paper.score),
+    }
+
+
+def normalize_email_rows(rows: dict) -> dict:
+    return {
+        key: value
+        for key, value in rows.items()
+        if normalize_inline_text(value) and normalize_inline_text(value) != "명시되지 않음"
+    }
 
 
 def render_email_meta_line(items: List[str]) -> str:
@@ -775,6 +909,119 @@ def render_email_button(label: str, url: str, variant: str = "dark") -> str:
         f'border:1px solid {border}; border-radius:999px; font-size:13px; '
         f'font-weight:700; letter-spacing:0.01em;">{text}</a>'
     )
+
+
+def render_email_section_block(label: str, text: str) -> str:
+    content = normalize_inline_text(text) or "명시되지 않음"
+    return (
+        '<div style="margin-top:14px; padding:16px 18px; background:#FCF8F2; border:1px solid #EBDFD1; border-radius:16px;">'
+        f'<div style="margin-bottom:8px; font-size:11px; letter-spacing:0.08em; text-transform:uppercase; color:#8B6A47;">{html.escape(label)}</div>'
+        f'<div style="font-size:14px; line-height:1.85; color:#3D3832;">{html.escape(content)}</div>'
+        "</div>"
+    )
+
+
+def render_email_list_block(label: str, items: List[str], ordered: bool = False) -> str:
+    values = [normalize_inline_text(item) for item in items if normalize_inline_text(item)]
+    if not values:
+        values = ["명시되지 않음"]
+    tag = "ol" if ordered else "ul"
+    item_html = "".join(
+        f'<li style="margin:0 0 8px 20px; color:#3D3832;">{html.escape(item)}</li>'
+        for item in values
+    )
+    return (
+        '<div style="margin-top:14px; padding:16px 18px; background:#FCF8F2; border:1px solid #EBDFD1; border-radius:16px;">'
+        f'<div style="margin-bottom:8px; font-size:11px; letter-spacing:0.08em; text-transform:uppercase; color:#8B6A47;">{html.escape(label)}</div>'
+        f'<{tag} style="margin:0; padding:0 0 0 2px; font-size:14px; line-height:1.75;">{item_html}</{tag}>'
+        "</div>"
+    )
+
+
+def render_email_named_rows_block(label: str, rows: dict) -> str:
+    body = "".join(
+        '<tr>'
+        f'<td valign="top" style="width:88px; padding:0 10px 10px 0; font-size:12px; line-height:1.7; color:#8B6A47; font-weight:700;">{html.escape(key)}</td>'
+        f'<td valign="top" style="padding:0 0 10px; font-size:14px; line-height:1.8; color:#3D3832;">{html.escape(normalize_inline_text(value) or "명시되지 않음")}</td>'
+        "</tr>"
+        for key, value in rows.items()
+    )
+    return (
+        '<div style="margin-top:14px; padding:16px 18px; background:#FCF8F2; border:1px solid #EBDFD1; border-radius:16px;">'
+        f'<div style="margin-bottom:10px; font-size:11px; letter-spacing:0.08em; text-transform:uppercase; color:#8B6A47;">{html.escape(label)}</div>'
+        f'<table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="width:100%;">{body}</table>'
+        "</div>"
+    )
+
+
+def render_email_quote_block(label: str, quotes: List[str]) -> str:
+    values = [normalize_inline_text(item) for item in quotes if normalize_inline_text(item)]
+    if not values:
+        return ""
+    content = "<br /><br />".join(html.escape(item) for item in values)
+    return (
+        '<div style="margin-top:14px; padding:16px 18px; background:#F7F1E8; border:1px solid #E8DCCB; border-radius:16px;">'
+        f'<div style="margin-bottom:8px; font-size:11px; letter-spacing:0.08em; text-transform:uppercase; color:#8B6A47;">{html.escape(label)}</div>'
+        f'<div style="font-size:14px; line-height:1.85; color:#3D3832;"><em>{content}</em></div>'
+        "</div>"
+    )
+
+
+def render_email_paper_card(paper: Paper, digest: dict, index: int, featured: bool = False) -> str:
+    header_label = "대표 리뷰" if featured else f"Review {index:02d}"
+    number_label = "No. 01" if featured else f"No. {index:02d}"
+    title_size = "28px" if featured else "24px"
+    link_label = "DOI 보기" if paper.doi else "원문 보기"
+    link = f"https://doi.org/{paper.doi}" if paper.doi else paper.link
+    meta_line = render_email_meta_line(build_email_meta_items(paper, include_score=featured))
+    profile_rows = normalize_email_rows(build_email_profile_rows(paper))
+    tags_html = "".join(
+        (
+            '<span style="display:inline-block; margin:0 6px 6px 0; padding:5px 10px; '
+            'background:#F5EEE4; border:1px solid #E6DDD0; border-radius:999px; '
+            'font-size:11px; line-height:1.2; color:#7A7168;">'
+            f'{html.escape(tag)}</span>'
+        )
+        for tag in collect_email_topics(paper, limit=6)
+    )
+    buttons = render_email_button(link_label, link)
+    if paper.pdf_link:
+        buttons += render_email_button("PDF", paper.pdf_link, variant="soft")
+    accent_bar = '<tr><td style="height:8px; background:#E7D9C7; font-size:0; line-height:0;">&nbsp;</td></tr>' if featured else ""
+    return f"""
+    <tr>
+      <td style="padding-top:16px;">
+        <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="width:100%; background:#FFFDF8; border:1px solid #E6DDD0; border-radius:24px;">
+          {accent_bar}
+          <tr>
+            <td style="padding:30px 28px 28px;">
+              <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="width:100%;">
+                <tr>
+                  <td style="font-size:11px; letter-spacing:0.12em; text-transform:uppercase; color:#8B6A47; font-weight:800;">{html.escape(header_label)}</td>
+                  <td align="right" style="font-size:11px; line-height:1.4; color:#8B6A47;">{html.escape(number_label)}</td>
+                </tr>
+              </table>
+              <div style="margin-top:12px; display:inline-block; padding:5px 10px; background:#F0E6D8; border-radius:999px; font-size:11px; line-height:1.2; color:#8B6A47; font-weight:700;">{html.escape(format_email_source(paper.source))}</div>
+              <div style="margin-top:12px;">{meta_line}</div>
+              <h2 style="margin:16px 0 0; font-family:Georgia, 'Times New Roman', serif; font-size:{title_size}; line-height:1.35; color:#25211C;">{html.escape(normalize_inline_text(paper.title))}</h2>
+              {render_email_named_rows_block("논문 정보", profile_rows) if profile_rows else ""}
+              {render_email_section_block("초록", digest["abstract"])}
+              {render_email_section_block("연구 요약", digest["summary"])}
+              {render_email_named_rows_block("연구 논리", digest["research_logic"])}
+              {render_email_list_block("핵심 발견", digest["key_findings"])}
+              {render_email_named_rows_block("기여점", digest["contributions"])}
+              {render_email_list_block("한계", digest["limitations"])}
+              {render_email_list_block("전이 가능한 인사이트", digest["transferable"])}
+              {render_email_list_block("아이디어 씨앗", digest["idea_seeds"], ordered=True)}
+              {render_email_quote_block("인용 구절", digest["citation_snippets"])}
+              {'<div style="margin-top:14px;">' + tags_html + '</div>' if tags_html else ''}
+              <div style="margin-top:20px;">{buttons}</div>
+            </td>
+          </tr>
+        </table>
+      </td>
+    </tr>
+    """
 
 
 def render_email_html(papers: List[Paper]) -> str:
@@ -844,145 +1091,17 @@ def render_email_html(papers: List[Paper]) -> str:
         """
         cards_html = empty_html
     else:
-        featured_paper = papers[0]
-        featured_digest = build_email_digest(featured_paper)
-        featured_meta = render_email_meta_line(build_email_meta_items(featured_paper, include_score=True))
-        featured_link_label = "DOI 보기" if featured_paper.doi else "원문 보기"
-        featured_findings = "".join(
-            (
-                '<li style="margin:0 0 8px 20px; color:#3D3832;">'
-                f'{html.escape(item)}</li>'
-            )
-            for item in featured_digest["key_findings"]
-        )
-        featured_insight = ""
-        if featured_digest["transferable"]:
-            featured_insight = (
-                '<div style="margin-top:18px; padding:16px 18px; background:#F7F1E8; border:1px solid #E8DCCB; border-radius:16px;">'
-                '<div style="margin-bottom:8px; font-size:11px; letter-spacing:0.08em; text-transform:uppercase; color:#8B6A47;">읽어둘 이유</div>'
-                f'<div style="font-size:14px; line-height:1.8; color:#3D3832;">{html.escape(featured_digest["transferable"][0])}</div>'
-                "</div>"
-            )
-
-        featured_link = f"https://doi.org/{featured_paper.doi}" if featured_paper.doi else featured_paper.link
-        featured_buttons = render_email_button(featured_link_label, featured_link)
-        if featured_paper.pdf_link:
-            featured_buttons += render_email_button("PDF", featured_paper.pdf_link, variant="soft")
-
-        featured_tags = "".join(
-            (
-                '<span style="display:inline-block; margin:0 6px 6px 0; padding:5px 10px; '
-                'background:#F5EEE4; border:1px solid #E6DDD0; border-radius:999px; '
-                'font-size:11px; line-height:1.2; color:#7A7168;">'
-                f'{html.escape(tag)}</span>'
-            )
-            for tag in collect_email_topics(featured_paper, limit=4)
-        )
-
-        featured_card = f"""
-        <tr>
-          <td style="padding-top:16px;">
-            <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="width:100%; background:#FFFDF8; border:1px solid #E6DDD0; border-radius:24px;">
-              <tr>
-                <td style="height:8px; background:#E7D9C7; font-size:0; line-height:0;">&nbsp;</td>
-              </tr>
-              <tr>
-                <td style="padding:30px 28px 28px;">
-                  <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="width:100%;">
-                    <tr>
-                      <td style="font-size:11px; letter-spacing:0.12em; text-transform:uppercase; color:#8B6A47; font-weight:800;">대표 리뷰</td>
-                      <td align="right" style="font-size:11px; line-height:1.4; color:#8B6A47;">No. 01</td>
-                    </tr>
-                  </table>
-                  <div style="margin-top:12px; display:inline-block; padding:5px 10px; background:#F0E6D8; border-radius:999px; font-size:11px; line-height:1.2; color:#8B6A47; font-weight:700;">{html.escape(format_email_source(featured_paper.source))}</div>
-                  <div style="margin-top:12px;">{featured_meta}</div>
-                  <div style="margin-top:12px; height:1px; background:#EFE5D9;">
-                    &nbsp;
-                  </div>
-                  <h2 style="margin:0; font-family:Georgia, 'Times New Roman', serif; font-size:28px; line-height:1.35; color:#25211C;">{html.escape(normalize_inline_text(featured_paper.title))}</h2>
-                  <div style="margin-top:18px; padding-top:18px; border-top:1px solid #EFE5D9;">
-                    <div style="margin-bottom:8px; font-size:11px; letter-spacing:0.08em; text-transform:uppercase; color:#8B6A47;">에디터 노트</div>
-                    <p style="margin:0; font-size:15px; line-height:1.9; color:#322D28;">{html.escape(truncate_text(featured_digest["summary"], 400))}</p>
-                  </div>
-                  {featured_insight}
-                  <div style="margin-top:18px;">
-                    <div style="margin-bottom:8px; font-size:11px; letter-spacing:0.08em; text-transform:uppercase; color:#8B6A47;">핵심 발견</div>
-                    <ul style="margin:0; padding:0 0 0 2px; font-size:14px; line-height:1.8;">{featured_findings}</ul>
-                  </div>
-                  {'<div style="margin-top:18px;">' + featured_tags + '</div>' if featured_tags else ''}
-                  <div style="margin-top:22px;">{featured_buttons}</div>
-                </td>
-              </tr>
-            </table>
-          </td>
-        </tr>
-        """
-
-        other_cards = []
-        for idx, paper in enumerate(papers[1:], start=2):
-            digest = build_email_digest(paper)
-            meta_line = render_email_meta_line(build_email_meta_items(paper))
-            paper_link_label = "DOI 보기" if paper.doi else "읽기"
-            findings_html = "".join(
-                (
-                    '<li style="margin:0 0 6px 18px; color:#4B453E;">'
-                    f'{html.escape(item)}</li>'
+        cards = []
+        for idx, paper in enumerate(papers, start=1):
+            cards.append(
+                render_email_paper_card(
+                    paper=paper,
+                    digest=build_email_digest(paper),
+                    index=idx,
+                    featured=(idx == 1),
                 )
-                for item in digest["key_findings"][:2]
             )
-            link = f"https://doi.org/{paper.doi}" if paper.doi else paper.link
-            paper_tags = "".join(
-                (
-                    '<span style="display:inline-block; margin:0 6px 6px 0; padding:4px 9px; '
-                    'background:#F6F0E7; border-radius:999px; font-size:11px; line-height:1.2; color:#7A7168;">'
-                    f'{html.escape(tag)}</span>'
-                )
-                for tag in collect_email_topics(paper, limit=3)
-            )
-            transferable_note = ""
-            if digest["transferable"]:
-                transferable_note = (
-                    '<div style="margin-top:14px; padding:12px 14px; background:#F8F3EB; border:1px solid #EBDFD1; border-radius:14px;">'
-                    '<div style="margin-bottom:6px; font-size:11px; letter-spacing:0.08em; text-transform:uppercase; color:#8B6A47;">짧은 메모</div>'
-                    f'<div style="font-size:13px; line-height:1.75; color:#4B453E;">{html.escape(digest["transferable"][0])}</div>'
-                    "</div>"
-                )
-            other_cards.append(
-                f"""
-                <tr>
-                  <td style="padding-top:14px;">
-                    <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="width:100%; background:#FFFDF8; border:1px solid #E6DDD0; border-radius:22px;">
-                      <tr>
-                        <td style="padding:22px 22px 20px;">
-                          <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="width:100%;">
-                            <tr>
-                              <td style="font-size:11px; letter-spacing:0.12em; text-transform:uppercase; color:#8B6A47; font-weight:800;">Review {idx:02d}</td>
-                              <td align="right">
-                                <span style="display:inline-block; padding:5px 10px; background:#F0E6D8; border-radius:999px; font-size:11px; line-height:1.2; color:#8B6A47; font-weight:700;">{html.escape(format_email_source(paper.source))}</span>
-                              </td>
-                            </tr>
-                          </table>
-                          <div style="margin-top:12px;">{meta_line}</div>
-                          <h3 style="margin:0; font-family:Georgia, 'Times New Roman', serif; font-size:22px; line-height:1.45; color:#25211C;">{html.escape(normalize_inline_text(paper.title))}</h3>
-                          <div style="margin-top:14px; padding-top:14px; border-top:1px solid #EFE5D9;">
-                            <div style="margin-bottom:8px; font-size:11px; letter-spacing:0.08em; text-transform:uppercase; color:#8B6A47;">요약</div>
-                            <p style="margin:0; font-size:14px; line-height:1.8; color:#3D3832;">{html.escape(truncate_text(digest["summary"], 240))}</p>
-                          </div>
-                          {transferable_note}
-                          <div style="margin-top:16px;">
-                            <div style="margin-bottom:8px; font-size:11px; letter-spacing:0.08em; text-transform:uppercase; color:#8B6A47;">핵심 포인트</div>
-                            <ul style="margin:0; padding:0 0 0 2px; font-size:14px; line-height:1.7;">{findings_html}</ul>
-                          </div>
-                          {'<div style="margin-top:14px;">' + paper_tags + '</div>' if paper_tags else ''}
-                          <div style="margin-top:18px;">{render_email_button(paper_link_label, link, variant='soft')}</div>
-                        </td>
-                      </tr>
-                    </table>
-                  </td>
-                </tr>
-                """
-            )
-        cards_html = featured_card + "".join(other_cards)
+        cards_html = "".join(cards)
 
     return f"""<!DOCTYPE html>
 <html lang="ko">
@@ -2463,7 +2582,7 @@ def run(config_path: Path, dry_run: bool = False) -> List[Path]:
         review_top_k=review_top_k,
     )
     reviewed_papers = [p for p in selected if p.review][:review_top_k]
-    email_markdown = render_email_markdown(reviewed_papers)
+    email_markdown = render_email_markdown_full(reviewed_papers)
     email_html = render_email_html(reviewed_papers)
 
     obsidian_path = os.getenv("OBSIDIAN_VAULT_PATH")
