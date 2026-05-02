@@ -1,0 +1,17 @@
+# How Generative AI Disrupts Search: An Empirical Study of Google Search, Gemini, and AI Overviews
+
+- Source: arxiv
+- ID: http://arxiv.org/abs/2604.27790v1
+- DOI: 명시되지 않음
+- Published: 2026-04-30T12:32:21Z
+- Authors: Riley Grossman, Songjiang Liu, Michael K. Chen, Mike Smith, Cristian Borcea, Yi Chen
+- Categories: cs.IR, cs.AI, cs.CL, cs.CY, cs.HC
+- Link: https://arxiv.org/abs/2604.27790v1
+- PDF: https://arxiv.org/pdf/2604.27790v1
+- Keyword Score: 6
+
+## Abstract
+Generative AI is being increasingly integrated into web search for the convenience it provides users. In this work, we aim to understand how generative AI disrupts web search by retrieving and presenting the information and sources differently from traditional search engines. We introduce a public benchmark dataset of 11,500 user queries to support our study and future research of generative search. We compare the search results returned by Google's search engine, the accompanying AI Overview (AIO), and Gemini Flash 2.5 for each query. We have made several key findings. First, we find that for 51.5\% of representative, real-user queries, AIOs are generated, and are displayed above the organic search results. Controversial questions frequently result in an AIO. Second, we show that the retrieved sources are substantially different for each search engine (<0.2 average Jaccard similarity). Traditional Google search is significantly more likely to retrieve information from popular or institutional websites in government or education, while generative search engines are significantly more likely to retrieve Google-owned content. Third, we observe that websites that block Google's AI crawler are significantly less likely to be retrieved by AIOs, despite having access to the content. Finally, AIOs are less consistent when processing two runs of the same query, and are less robust to minor query edits. Our findings have important implications for understanding how generative search impacts website visibility, the effectiveness of generative engine optimization techniques, and the information users receive. We call for revenue frameworks to foster a sustainable and mutually beneficial ecosystem for publishers and generative search providers.
+
+## OpenAI Review
+(OpenAI review failed: 429 Client Error: Too Many Requests for url: https://api.openai.com/v1/chat/completions)
