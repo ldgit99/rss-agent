@@ -439,6 +439,7 @@
   "http://arxiv.org/abs/2604.24197v1",
   "http://arxiv.org/abs/2604.24470v1",
   "http://arxiv.org/abs/2604.24758v1",
+  "http://arxiv.org/abs/2604.24758v2",
   "http://arxiv.org/abs/2604.24807v1",
   "http://arxiv.org/abs/2604.24824v1",
   "http://arxiv.org/abs/2604.24966v1",
@@ -478,10 +479,15 @@
   "http://arxiv.org/abs/2605.01401v1",
   "http://arxiv.org/abs/2605.01582v1",
   "http://arxiv.org/abs/2605.01659v1",
+  "http://arxiv.org/abs/2605.02005v1",
   "http://arxiv.org/abs/2605.02200v1",
   "http://arxiv.org/abs/2605.02402v1",
   "http://arxiv.org/abs/2605.02649v1",
   "http://arxiv.org/abs/2605.02884v1",
+  "http://arxiv.org/abs/2605.03111v1",
+  "http://arxiv.org/abs/2605.03287v1",
+  "http://arxiv.org/abs/2605.03800v1",
+  "http://arxiv.org/abs/2605.03968v1",
   "openalex:https://openalex.org/W2996442609",
   "openalex:https://openalex.org/W3188365831",
   "openalex:https://openalex.org/W4312290273",
@@ -659,5 +665,7 @@
   "openalex:https://openalex.org/W7156773506",
   "openalex:https://openalex.org/W7158758864",
   "openalex:https://openalex.org/W7159552218",
-  "openalex:https://openalex.org/W7160006075"
+  "openalex:https://openalex.org/W7160006075",
+  "openalex:https://openalex.org/W7160156182",
+  "openalex:https://openalex.org/W7160368189"
 ]
