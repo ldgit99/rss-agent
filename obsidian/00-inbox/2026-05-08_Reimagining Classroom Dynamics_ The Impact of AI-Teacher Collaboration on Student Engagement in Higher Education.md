@@ -1,0 +1,17 @@
+# Reimagining Classroom Dynamics: The Impact of AI-Teacher Collaboration on Student Engagement in Higher Education
+
+- Source: eric
+- ID: eric:EJ1503175
+- DOI: 명시되지 않음
+- Published: 명시되지 않음
+- Authors: C. Surendhranatha Reddy, R. Leelavathi
+- Categories: ERIC
+- Link: https://eric.ed.gov/
+- PDF: 명시되지 않음
+- Keyword Score: 28
+
+## Abstract
+Purpose: This study aims to explore the influential ability of artificial intelligence (AI)-teacher collaboration in higher education, examining its impact on academic performance and engagement of students. By leveraging AI, educators can deliver tailored learning experiences, enhance student participation and streamline administrative processes, addressing key limitations of traditional teaching methods. Design/methodology/approach: A mixed-methods research design was employed to comprehensively examine the impact of AI-teacher collaboration on student engagement. Quantitative data were collected through a structured survey targeting students in higher education to capture their perspectives on AI-supported learning environments and related outcomes. Qualitative data were obtained via in-depth interviews with students, providing deeper insights into the interaction between AI tools and teaching methodologies. The data collection spanned diverse higher education institutions, encompassing various disciplines, institutional types and geographical contexts. This comprehensive approach ensures that the findings are robust and representative of diverse educational settings. Findings: The findings reveal that AI-teacher collaboration significantly enhances student engagement and improves academic outcomes. AI integration enables personalized learning, fostering greater student involvement, while educators benefit from reduced administrative workloads and improved teaching efficiency. However, challenges persist, including barriers to AI adoption and the need for adequate educator training to effectively utilize AI tools. Research limitations/implications: The major limitation of this research is that all student participants were self-selected and voluntarily chose to engage in the process. The study was confined to participants from higher education and their motivation to enhance their knowledge and skills in AI-integrated teaching likely influenced their responses. It remains unclear how students might respond if participation were mandated rather than voluntary. Practical implications: This study assists educators and policymakers in creating AI-integrated curricula that improve student engagement while guaranteeing ethical AI utilization. It underscores AI's function in customizing education, alleviating administrative responsibilities and stressing the necessity for equal access and educator training. Furthermore, it delineates obstacles in AI implementation, directing subsequent research toward optimal methods for sustainable and inclusive education. Originality/value: This study presents empirical evidence about the influence of AI-teacher collaboration, elucidating its significance in improving student engagement and academic performance in higher education. This work integrates AI into several educational contexts, contributing to the discourse on sustainable, inclusive and high-quality teaching techniques, in alignment with Sustainable Development Goal 4 (Quality Education).
+
+## OpenAI Review
+(OpenAI review failed: 429 Client Error: Too Many Requests for url: https://api.openai.com/v1/chat/completions)
