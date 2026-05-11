@@ -1,0 +1,17 @@
+# ECNUClaw: A Learner-Profiled Intelligent Study Companion Framework for K-12 Personalized Education
+
+- Source: arxiv
+- ID: http://arxiv.org/abs/2605.08040v1
+- DOI: 명시되지 않음
+- Published: 2026-05-08T17:29:28Z
+- Authors: Yizhou Zhou, Jiayin Li, Zhi Zhang
+- Categories: cs.HC
+- Link: https://arxiv.org/abs/2605.08040v1
+- PDF: https://arxiv.org/pdf/2605.08040v1
+- Keyword Score: 17
+
+## Abstract
+We introduce ECNUClaw, an open-source framework for building learner-profiled intelligent study companions in K-12 education. The system constructs and maintains a five-dimension learner profile -- covering cognitive, behavioral, emotional, metacognitive, and contextual dimensions -- by extracting signals from student-companion dialogues at each turn. Profile updates feed directly into an adaptive strategy engine that adjusts the companion's guidance intensity, encouragement frequency, and Bloom's taxonomy scaffolding in real time. The framework design draws on three theoretical strands from the Chinese educational technology literature: Zhang's Digital Portrait Three-Layer Framework for learner assessment, the Education Brain model for educational system architecture, and the Human-AI Collaborative IQ concept for companion design philosophy. ECNUClaw is implemented in Python and supports seven Chinese LLM providers through a unified OpenAI-compatible adapter layer. We describe the system architecture, the profiling and adaptation mechanisms, and discuss limitations and next steps. The source code is available at https://github.com/bushushu2333/ECNUClaw.
+
+## OpenAI Review
+(OpenAI review failed: 429 Client Error: Too Many Requests for url: https://api.openai.com/v1/chat/completions)
